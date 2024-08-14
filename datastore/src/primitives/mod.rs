@@ -5,7 +5,7 @@ use crate::topics::TopicIDType;
 
 pub mod timestamp;
 pub mod blob;
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Primitives{
     Timestamp(VicInstant),
     Integer(u64),

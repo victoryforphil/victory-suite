@@ -19,7 +19,7 @@ impl Default for VicTimecode {
 impl VicTimecode {
     pub fn new_secs(secs: f64) -> VicTimecode {
         let secs = secs as f64;
-        let nanos = ((secs.fract() * 1_000_000_000.0) as u32);
+        let nanos = (secs.fract() * 1_000_000_000.0) as u32;
         VicTimecode {
             secs: secs as u64,
             nanos,

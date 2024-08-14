@@ -1,5 +1,5 @@
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VicBlob{
     pub data: Vec<u8>,
     pub length: u64,
