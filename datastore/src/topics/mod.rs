@@ -78,7 +78,7 @@ pub type TopicKeyHandle = Arc<TopicKey>;
 pub trait TopicKeyProvider {
     fn key(&self) -> &TopicKey;
     fn handle(&self) -> TopicKeyHandle {
-        self.key().handle()
+        Arc::new(self.key().clone())
     }
 }
 
@@ -95,21 +95,17 @@ impl TopicKeyProvider for TopicKey {
 }
 
 impl TopicKey {
-    pub fn handle(&self) -> TopicKeyHandle {
-        Arc::new(self.clone())
-    }
-
-    pub fn from_str(display_name: &str) -> TopicKeyHandle {
+    pub fn from_str(display_name: &str) -> TopicKey {
         let sections = display_name
             .split("/")
             .map(|s| TopicKeySection::new_generate(s.to_string()))
             .collect();
 
-        Arc::new(TopicKey { sections })
+        TopicKey { sections }
     }
 
-    pub fn from_existing(sections: Vec<TopicKeySection>) -> TopicKeyHandle {
-        Arc::new(TopicKey { sections })
+    pub fn from_existing(sections: Vec<TopicKeySection>) -> TopicKey {
+        TopicKey { sections }
     }
 
     pub fn display_name(&self) -> String {
@@ -137,6 +133,11 @@ impl TopicKey {
     }
 }
 
+impl From<&str> for TopicKey {
+    fn from(value: &str) -> Self {
+        TopicKey::from_str(value)
+    }
+}
 // Test
 #[cfg(test)]
 mod tests {

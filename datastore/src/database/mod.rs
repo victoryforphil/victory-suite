@@ -120,22 +120,21 @@ mod tests {
 
         let bucket = datastore.get_bucket(&topic);
         assert_eq!(bucket.is_ok(), true);
-        assert_eq!(bucket.unwrap().read().unwrap().topic, topic);
+        assert_eq!(bucket.unwrap().read().unwrap().topic, topic.handle());
     }
 
     #[test]
     pub fn test_datastore_add_primitive() {
         let mut datastore = Datastore::new();
-        let topic = TopicKey::from_str("test/topic");
+        let topic: TopicKey = "test/topic".into();
         let time = VicInstant::now();
-        let value: Primitives = 42.into();
+        datastore.add_primitive(&topic, time.clone(), 42.into());
 
-        datastore.add_primitive(&topic, time.clone(), value.clone());
         let bucket = datastore.get_bucket(&topic).unwrap();
         let bucket = bucket.read().unwrap();
         let datapoints = bucket.get_datapoints();
         assert_eq!(datapoints.len(), 1);
         assert_eq!(datapoints[0].time, time.clone().into());
-        assert_eq!(datapoints[0].value, value);
+        assert_eq!(datapoints[0].value, 42.into());
     }
 }
