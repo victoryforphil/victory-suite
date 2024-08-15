@@ -8,7 +8,7 @@ use log::{debug, trace};
 use crate::{
     datapoints::Datapoint,
     primitives::{timestamp::VicInstantHandle, Primitives},
-    topics::TopicKeyHandle,
+    topics::{TopicKeyHandle, TopicKeyProvider},
 };
 #[derive(Debug)]
 /// A bucket is a collection of datapoints for a specific topic
@@ -20,10 +20,10 @@ pub struct Bucket {
 pub type BucketHandle = Arc<RwLock<Bucket>>;
 
 impl Bucket {
-    pub fn new(topic: TopicKeyHandle) -> BucketHandle {
-        debug!("Creating new bucket for topic {:?}", topic);
+    pub fn new<T: TopicKeyProvider>(topic: &T) -> BucketHandle {
+        debug!("Creating new bucket for topic {:?}", topic.key());
         Arc::new(RwLock::new(Bucket {
-            topic,
+            topic: topic.handle(),
             values: BTreeMap::new(),
         }))
     }
@@ -76,7 +76,7 @@ mod tests {
     #[test]
     fn test_bucket_creation() {
         let topic = TopicKey::from_str("test/topic");
-        let bucket = Bucket::new(topic.handle());
+        let bucket = Bucket::new(&topic);
         assert_eq!(bucket.read().unwrap().values.len(), 0);
         assert_eq!(bucket.read().unwrap().topic, topic.handle());
     }
@@ -84,7 +84,7 @@ mod tests {
     #[test]
     fn test_bucket_read_write_primitives() {
         let topic = TopicKey::from_str("test/topic");
-        let bucket = Bucket::new(topic.handle());
+        let bucket = Bucket::new(&topic);
 
         let time = VicInstant::new(VicTimecode::new_secs(1.0)).handle();
 
@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn test_bucket_read_write_datapoints() {
         let topic = TopicKey::from_str("test/topic");
-        let bucket = Bucket::new(topic.handle());
+        let bucket = Bucket::new(&topic);
 
         let time = VicInstant::new(VicTimecode::new_secs(1.0)).handle();
 

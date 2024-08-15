@@ -3,12 +3,14 @@ use timestamp::{VicInstant, VicTimecode};
 
 use crate::topics::TopicIDType;
 
-pub mod timestamp;
+pub mod integer;
+
 pub mod blob;
+pub mod timestamp;
 #[derive(Debug, Clone, PartialEq)]
-pub enum Primitives{
+pub enum Primitives {
     Timestamp(VicInstant),
-    Integer(u64),
+    Integer(i64),
     Float(f64),
     Text(String),
     Blob(VicBlob),
@@ -16,4 +18,3 @@ pub enum Primitives{
     List(Vec<Primitives>),
     Reference(TopicIDType),
 }
-

@@ -1,20 +1,16 @@
 use std::{sync::Arc, time::Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct VicTimecode{
+pub struct VicTimecode {
     secs: u64,
     nanos: u32,
 }
 
 impl Default for VicTimecode {
     fn default() -> Self {
-        VicTimecode {
-            secs: 0,
-            nanos: 0,
-        }
+        VicTimecode { secs: 0, nanos: 0 }
     }
 }
-
 
 impl VicTimecode {
     pub fn new_secs(secs: f64) -> VicTimecode {
@@ -27,17 +23,11 @@ impl VicTimecode {
     }
 
     pub fn new(secs: u64, nanos: u32) -> VicTimecode {
-        VicTimecode {
-            secs,
-            nanos,
-        }
+        VicTimecode { secs, nanos }
     }
 
     pub fn zero() -> VicTimecode {
-        VicTimecode {
-            secs: 0,
-            nanos: 0,
-        }
+        VicTimecode { secs: 0, nanos: 0 }
     }
 
     pub fn new_hz(hz: f64) -> VicTimecode {
@@ -84,9 +74,12 @@ impl Default for VicInstant {
 
 impl VicInstant {
     pub fn new(time: VicTimecode) -> VicInstant {
-        VicInstant {
-            time,
-        }
+        VicInstant { time }
+    }
+
+    pub fn now() -> VicInstant {
+        let now = Instant::now();
+        now.into()
     }
 
     pub fn handle(&self) -> VicInstantHandle {
@@ -105,8 +98,12 @@ impl From<Instant> for VicInstant {
     }
 }
 
-
+impl From<Arc<VicInstant>> for VicInstant {
+    fn from(handle: Arc<VicInstant>) -> Self {
+        handle.as_ref().clone()
+    }
+}
 
 pub struct VicDuration {
-    pub time : VicTimecode,
+    pub time: VicTimecode,
 }

@@ -27,7 +27,7 @@ impl Datastore {
 
     pub fn create_bucket<T: TopicKeyProvider>(&mut self, topic: &T) {
         if !self.buckets.contains_key(&topic.handle()) {
-            let bucket = Bucket::new(topic.handle().clone());
+            let bucket = Bucket::new(topic);
             self.buckets.insert(topic.handle().clone(), bucket);
         }
     }
@@ -42,12 +42,17 @@ impl Datastore {
             .ok_or_else(|| DatastoreError::BucketNotFound(topic.key().clone()))
     }
 
-    pub fn add_primitive(&mut self, topic: TopicKey, time: VicInstant, value: Primitives) {
+    pub fn add_primitive<T: TopicKeyProvider>(
+        &mut self,
+        topic: &T,
+        time: VicInstant,
+        value: Primitives,
+    ) {
         let topic = topic.handle();
         let time = time.handle();
 
         if !self.buckets.contains_key(&topic) {
-            let bucket = Bucket::new(topic.clone());
+            let bucket = Bucket::new(&topic);
             self.buckets.insert(topic.clone(), bucket);
         }
 
@@ -56,20 +61,20 @@ impl Datastore {
         bucket.write().unwrap().add_primitive(time, value);
     }
 
-    pub fn get_latest_primitive(&self, topic: TopicKey) -> Option<Primitives> {
+    pub fn get_latest_primitive<T: TopicKeyProvider>(&self, topic: &T) -> Option<Primitives> {
         let topic = topic.handle();
         self.buckets
             .get(&topic)
             .and_then(|b| b.read().unwrap().get_latest_value().cloned())
     }
 
-    pub fn get_latest_primitives(
+    pub fn get_latest_primitives<T: TopicKeyProvider>(
         &self,
-        topics: BTreeSet<TopicKey>,
+        topics: BTreeSet<T>,
     ) -> BTreeMap<TopicKey, Primitives> {
         topics
             .iter()
-            .filter_map(|t| self.get_latest_primitive(t.clone()).map(|p| (t.clone(), p)))
+            .filter_map(|t| self.get_latest_primitive(t).map(|p| (t.key().clone(), p)))
             .collect()
     }
 
@@ -116,5 +121,21 @@ mod tests {
         let bucket = datastore.get_bucket(&topic);
         assert_eq!(bucket.is_ok(), true);
         assert_eq!(bucket.unwrap().read().unwrap().topic, topic);
+    }
+
+    #[test]
+    pub fn test_datastore_add_primitive() {
+        let mut datastore = Datastore::new();
+        let topic = TopicKey::from_str("test/topic");
+        let time = VicInstant::now();
+        let value: Primitives = 42.into();
+
+        datastore.add_primitive(&topic, time.clone(), value.clone());
+        let bucket = datastore.get_bucket(&topic).unwrap();
+        let bucket = bucket.read().unwrap();
+        let datapoints = bucket.get_datapoints();
+        assert_eq!(datapoints.len(), 1);
+        assert_eq!(datapoints[0].time, time.clone().into());
+        assert_eq!(datapoints[0].value, value);
     }
 }
