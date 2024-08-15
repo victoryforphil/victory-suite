@@ -70,12 +70,12 @@ mod tests {
             timestamp::{VicInstant, VicTimecode},
             Primitives,
         },
-        topics::TopicKey,
+        topics::{TopicKey, TopicKeyProvider},
     };
 
     #[test]
     fn test_bucket_creation() {
-        let topic = TopicKey::from_str("test/topic");
+        let topic = TopicKey::from_str("test/topic").handle();
         let bucket = Bucket::new(&topic);
         assert_eq!(bucket.read().unwrap().values.len(), 0);
         assert_eq!(bucket.read().unwrap().topic, topic.handle());
