@@ -11,8 +11,8 @@ pub use update::*;
 #[derive(Debug, Clone)]
 pub enum PubSubMessage {
     Register(),
-    Publish(),
+    Publish(PublishMessage),
     Subscribe(SubscribeMessage),
-    Update(),
+    Update(UpdateMessage),
     Health(),
 }

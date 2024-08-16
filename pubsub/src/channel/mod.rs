@@ -1,10 +1,18 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
-use datastore::{buckets::BucketHandle, database::Datastore, topics::TopicKeyHandle};
+use datastore::{
+    buckets::BucketHandle, database::Datastore, datapoints::Datapoint, topics::TopicKeyHandle,
+};
 use log::{debug, info};
 use thiserror::Error;
 
-use crate::client::PubSubClientHandle;
+use crate::{
+    client::{PubSubClientHandle, PubSubClientIDType},
+    messages::{PublishMessage, UpdateMessage},
+};
 
 #[derive(Clone)]
 pub struct PubSubChannel {
@@ -12,6 +20,7 @@ pub struct PubSubChannel {
     pub bucket: BucketHandle,
     pub publishers: Vec<PubSubClientHandle>,
     pub subscribers: Vec<PubSubClientHandle>,
+    pub update_queue: HashMap<PubSubClientIDType, UpdateMessage>,
 }
 
 pub type PubSubChannelHandle = Arc<Mutex<PubSubChannel>>;
@@ -50,6 +59,7 @@ impl PubSubChannel {
             bucket: bucket.unwrap(),
             publishers: Vec::new(),
             subscribers: Vec::new(),
+            update_queue: HashMap::new(),
         })
     }
     pub fn handle(&self) -> PubSubChannelHandle {
@@ -61,6 +71,39 @@ impl PubSubChannel {
             client.lock().unwrap().id
         );
         self.publishers.push(client);
+    }
+
+    pub fn on_publish(&mut self, datapoint: Vec<Datapoint>) {
+        debug!("Publishing message to PubSubChannel: {}", self.topic);
+        {
+            let mut bucket = self.bucket.write().unwrap();
+            for dp in datapoint {
+                bucket.add_datapoint(dp);
+            }
+        }
+        self.on_update();
+    }
+
+    fn on_update(&mut self) {
+        debug!("Updating message to PubSubChannel: {}", self.topic);
+        let bucket = self.bucket.read().unwrap();
+
+        for sub in self.subscribers.iter() {
+            let value = bucket.get_latest_datapoint().unwrap();
+            let update = UpdateMessage::new(value.clone());
+            self.update_queue.insert(sub.lock().unwrap().id, update);
+        }
+    }
+
+    pub fn get_updates(&mut self) -> HashMap<PubSubClientIDType, UpdateMessage> {
+        let updates = self.update_queue.clone();
+        debug!(
+            "Found {} updates for PubSubChannel: {}",
+            updates.len(),
+            self.topic
+        );
+        self.update_queue.clear();
+        updates
     }
 
     pub fn add_subscriber(&mut self, client: PubSubClientHandle) {

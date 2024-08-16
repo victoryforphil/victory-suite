@@ -7,6 +7,7 @@ use std::{
 
 use datastore::{
     database::Datastore,
+    datapoints::Datapoint,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
 use log::{debug, info};
@@ -15,7 +16,7 @@ use crate::{
     adapters::PubSubAdapterHandle,
     channel::{PubSubChannel, PubSubChannelHandle},
     client::{PubSubClient, PubSubClientHandle, PubSubClientIDType},
-    messages::PubSubMessage,
+    messages::{PubSubMessage, PublishMessage, UpdateMessage},
 };
 
 pub struct PubSubServer {
@@ -52,11 +53,41 @@ impl PubSubServer {
                     .extend(messages);
             }
         }
-
+        let mut publish_msgs: HashMap<PubSubClientIDType, Vec<PublishMessage>> = HashMap::new();
         for (client_id, messages) in incoming_msgs {
             for message in messages {
-                self.handle_message(client_id, message);
+                let to_send = self.handle_message(client_id, message);
+                publish_msgs
+                    .entry(client_id)
+                    .or_insert_with(Vec::new)
+                    .extend(to_send);
             }
+        }
+
+        for (_client_id, messages) in publish_msgs {
+            for message in messages {
+                let topic = message.topic;
+                let channel = self.get_or_insert_channel(topic);
+                let mut channel = channel.lock().unwrap();
+                channel.on_publish(message.messages);
+            }
+        }
+
+        let mut to_send: HashMap<PubSubClientIDType, Vec<PubSubMessage>> = HashMap::new();
+        for channel in self.channels.values() {
+            let mut channel = channel.lock().unwrap();
+            let updates = channel.get_updates();
+            for (client_id, update) in updates {
+                to_send
+                    .entry(client_id)
+                    .or_insert_with(Vec::new)
+                    .push(PubSubMessage::Update(UpdateMessage::new(update.messages)));
+            }
+        }
+
+        for adapter in self.adapters.iter_mut() {
+            let mut adapter = adapter.lock().unwrap();
+            adapter.write(to_send.clone());
         }
     }
 
@@ -86,17 +117,25 @@ impl PubSubServer {
         channel.lock().unwrap().add_subscriber(client.clone());
     }
 
-    fn handle_message(&mut self, client_id: PubSubClientIDType, message: PubSubMessage) {
+    fn handle_message(
+        &mut self,
+        client_id: PubSubClientIDType,
+        message: PubSubMessage,
+    ) -> Vec<PublishMessage> {
+        let mut to_send = Vec::new();
         match message {
             PubSubMessage::Register() => {
                 self.register_client(client_id);
             }
-            PubSubMessage::Publish() => {}
+            PubSubMessage::Publish(data) => {
+                to_send.push(data);
+            }
             PubSubMessage::Subscribe(data) => {
                 self.subscribe_client(client_id, data.topic.handle());
             }
-            PubSubMessage::Update() => {}
+            PubSubMessage::Update(_) => {}
             PubSubMessage::Health() => {}
         }
+        to_send
     }
 }

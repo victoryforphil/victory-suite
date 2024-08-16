@@ -44,7 +44,7 @@ impl Bucket {
     }
 
     pub fn get_latest_datapoint(&self) -> Option<&Datapoint> {
-        self.values.iter().next_back().map(|(_, v)| v)
+        self.values.iter().last().map(|(_, v)| v)
     }
 
     pub fn get_datapoints_ref(&self) -> Vec<&Datapoint> {
