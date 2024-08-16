@@ -1,109 +1,46 @@
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, Mutex},
-};
+use std::collections::HashMap;
 
-use datastore::{datapoints::Datapoint, topics::TopicKeyHandle};
-use log::info;
+use log::debug;
 
-use crate::client::{PubSubClient, PubSubClientHandle};
+use crate::{client::PubSubClientIDType, messages::PubSubMessage};
 
-use super::{PubSubAdapter, PubSubAdapterOffspring, PubSubAdapterOffspringHandle};
-
-pub struct MockPubSubOffpspring {
-    pub data: BTreeMap<TopicKeyHandle, Vec<Datapoint>>,
-}
-
-impl PubSubAdapterOffspring for MockPubSubOffpspring {
-    fn read(&mut self) -> BTreeMap<TopicKeyHandle, Vec<Datapoint>> {
-        // Drain read
-        let data = self.data.clone();
-        self.data.clear();
-        data
-    }
-
-    fn write(&mut self, data: BTreeMap<TopicKeyHandle, Vec<Datapoint>>) {
-        self.data = data;
-    }
-}
-
-pub struct MockPubSubClient {
-    pub id: String,
-    pub subscriptions: Vec<TopicKeyHandle>,
-    pub publishers: Vec<TopicKeyHandle>,
-    pub adapter_offspring: PubSubAdapterOffspringHandle,
-}
+use super::PubSubAdapter;
 
 pub struct MockPubSubAdapter {
-    pub clients: Vec<PubSubClientHandle>,
+    read_buffer: HashMap<PubSubClientIDType, Vec<PubSubMessage>>,
+    write_buffer: HashMap<PubSubClientIDType, Vec<PubSubMessage>>,
 }
 
 impl MockPubSubAdapter {
     pub fn new() -> Self {
         MockPubSubAdapter {
-            clients: Vec::new(),
+            read_buffer: HashMap::new(),
+            write_buffer: HashMap::new(),
         }
     }
 
-    pub fn register_client(&mut self, id: String) {
-        info!("Creating new MockPubSubClient: {}", id);
-        let offspring = Arc::new(Mutex::new(MockPubSubOffpspring {
-            data: BTreeMap::new(),
-        }));
-        let client = Arc::new(Mutex::new(PubSubClient::new(id, offspring)));
-        self.clients.push(client);
+    pub fn client_read(&mut self, client_id: PubSubClientIDType) -> Vec<PubSubMessage> {
+        debug!("MockPubSubAdapter::client_read: client_id={}", client_id);
+        self.write_buffer.remove(&client_id).unwrap_or_default()
+    }
+
+    pub fn client_write(&mut self, client_id: PubSubClientIDType, messages: Vec<PubSubMessage>) {
+        self.read_buffer
+            .entry(client_id)
+            .or_insert_with(Vec::new)
+            .extend(messages);
     }
 }
 
 impl PubSubAdapter for MockPubSubAdapter {
-    fn collect_clients(&mut self) -> Vec<PubSubClientHandle> {
-        // Drain the clients and return them
-        let clients = self.clients.clone();
-        self.clients.clear();
-        clients
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use datastore::{
-        primitives::timestamp::VicInstant,
-        topics::{TopicKey, TopicKeyProvider},
-    };
-
-    use super::*;
-
-    #[test]
-    fn test_mock_pubsub_adapter_new_client() {
-        let mut adapter = MockPubSubAdapter::new();
-        adapter.register_client("test".to_string());
-        let clients = adapter.collect_clients();
-        assert_eq!(clients.len(), 1);
+    fn read(&mut self) -> HashMap<PubSubClientIDType, Vec<PubSubMessage>> {
+        // Drain read the buffer
+        let mut buffer = HashMap::new();
+        std::mem::swap(&mut self.read_buffer, &mut buffer);
+        buffer
     }
 
-    #[test]
-    fn test_mock_pubsub_adapter_offspring() {
-        let mut adapter = MockPubSubAdapter::new();
-        adapter.register_client("test".to_string());
-        let clients = adapter.collect_clients();
-        assert_eq!(clients.len(), 1);
-
-        let client = clients[0].lock().unwrap();
-        let mut offspring = client.adapter_offspring.lock().unwrap();
-
-        let mut mock_data = BTreeMap::new();
-        let mock_topic = TopicKey::from_str("test").handle();
-        mock_data.insert(
-            mock_topic.clone(),
-            vec![Datapoint::new(
-                &mock_topic,
-                VicInstant::now().handle(),
-                1.into(),
-            )],
-        );
-        offspring.write(mock_data);
-
-        let data = offspring.read();
-        assert_eq!(data.len(), 1);
+    fn write(&mut self, to_send: HashMap<PubSubClientIDType, Vec<PubSubMessage>>) {
+        self.write_buffer = to_send;
     }
 }

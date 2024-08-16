@@ -68,13 +68,19 @@ impl PubSubChannel {
             "Adding subscriber to PubSubChannel: {}",
             client.lock().unwrap().id
         );
+
+        client
+            .lock()
+            .unwrap()
+            .subscriptions
+            .push(self.topic.clone());
+
         self.subscribers.push(client);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_pubsub_channel() {}

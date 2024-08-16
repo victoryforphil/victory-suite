@@ -1,22 +1,19 @@
-mod mock;
+pub mod mock;
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     sync::{Arc, Mutex},
 };
 
 use datastore::{datapoints::Datapoint, topics::TopicKeyHandle};
 
-use crate::client::PubSubClientHandle;
+use crate::{
+    client::{PubSubClientHandle, PubSubClientIDType},
+    messages::PubSubMessage,
+};
 
 pub trait PubSubAdapter {
-    fn collect_clients(&mut self) -> Vec<PubSubClientHandle>;
+    fn read(&mut self) -> HashMap<PubSubClientIDType, Vec<PubSubMessage>>;
+    fn write(&mut self, to_send: HashMap<PubSubClientIDType, Vec<PubSubMessage>>);
 }
-
-pub trait PubSubAdapterOffspring {
-    fn read(&mut self) -> BTreeMap<TopicKeyHandle, Vec<Datapoint>>;
-    fn write(&mut self, data: BTreeMap<TopicKeyHandle, Vec<Datapoint>>);
-}
-
 pub type PubSubAdapterHandle = Arc<Mutex<dyn PubSubAdapter>>;
-pub type PubSubAdapterOffspringHandle = Arc<Mutex<dyn PubSubAdapterOffspring>>;

@@ -2,22 +2,20 @@ use std::sync::{Arc, Mutex};
 
 use datastore::topics::TopicKeyHandle;
 
-use crate::adapters::PubSubAdapterOffspringHandle;
+pub type PubSubClientIDType = u16;
 
 pub struct PubSubClient {
-    pub id: String,
+    pub id: PubSubClientIDType,
     pub subscriptions: Vec<TopicKeyHandle>,
     pub publishers: Vec<TopicKeyHandle>,
-    pub adapter_offspring: PubSubAdapterOffspringHandle,
 }
 
 impl PubSubClient {
-    pub fn new(id: String, adapter_offspring: PubSubAdapterOffspringHandle) -> Self {
+    pub fn new(id: PubSubClientIDType) -> Self {
         PubSubClient {
             id,
             subscriptions: Vec::new(),
             publishers: Vec::new(),
-            adapter_offspring,
         }
     }
 }
