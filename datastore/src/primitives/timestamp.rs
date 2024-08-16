@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Instant};
+use std::{ops::Add, sync::Arc, time::Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VicTimecode {
@@ -84,6 +84,33 @@ impl VicInstant {
 
     pub fn handle(&self) -> VicInstantHandle {
         Arc::new(self.clone())
+    }
+
+    pub fn zero() -> VicInstant {
+        VicInstant {
+            time: VicTimecode::zero(),
+        }
+    }
+
+    pub fn secs(&self) -> f64 {
+        self.time.secs()
+    }
+
+    pub fn ms(&self) -> f64 {
+        self.time.ms()
+    }
+}
+
+impl Add<VicDuration> for VicInstant {
+    type Output = VicInstant;
+
+    fn add(self, rhs: VicDuration) -> Self::Output {
+        let duration_time = rhs.time;
+        let new_time = VicTimecode {
+            secs: self.time.secs + duration_time.secs,
+            nanos: self.time.nanos + duration_time.nanos,
+        };
+        VicInstant::new(new_time)
     }
 }
 

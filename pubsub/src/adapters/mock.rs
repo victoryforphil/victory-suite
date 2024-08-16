@@ -21,10 +21,16 @@ impl MockPubSubAdapter {
 
     pub fn client_read(&mut self, client_id: PubSubClientIDType) -> Vec<PubSubMessage> {
         debug!("MockPubSubAdapter::client_read: client_id={}", client_id);
-        self.write_buffer.remove(&client_id).unwrap_or_default()
+        self.write_buffer
+            .remove(&client_id)
+            .unwrap_or_else(Vec::new)
     }
 
     pub fn client_write(&mut self, client_id: PubSubClientIDType, messages: Vec<PubSubMessage>) {
+        debug!(
+            "MockPubSubAdapter::client_write: client_id={}, messages={:?}",
+            client_id, messages
+        );
         self.read_buffer
             .entry(client_id)
             .or_insert_with(Vec::new)
@@ -41,6 +47,19 @@ impl PubSubAdapter for MockPubSubAdapter {
     }
 
     fn write(&mut self, to_send: HashMap<PubSubClientIDType, Vec<PubSubMessage>>) {
-        self.write_buffer = to_send;
+        for (client_id, messages) in to_send {
+            debug!(
+                "MockPubSubAdapter::write: client_id={}, messages={:?}",
+                client_id, messages
+            );
+            self.write_buffer
+                .entry(client_id)
+                .or_insert_with(Vec::new)
+                .extend(messages);
+        }
+        debug!(
+            "Current mock adapter write buffer size: {}",
+            self.write_buffer.len()
+        );
     }
 }
