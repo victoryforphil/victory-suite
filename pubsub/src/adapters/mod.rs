@@ -2,7 +2,7 @@ mod mock;
 
 use std::{
     collections::BTreeMap,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
 };
 
 use datastore::{datapoints::Datapoint, topics::TopicKeyHandle};
