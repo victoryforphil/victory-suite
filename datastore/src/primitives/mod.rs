@@ -1,5 +1,5 @@
 use blob::VicBlob;
-use timestamp::{VicInstant, VicTimecode};
+use timestamp::VicInstant;
 
 use crate::topics::TopicIDType;
 

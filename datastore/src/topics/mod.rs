@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use log::{debug, trace};
+use log::debug;
 
 pub type TopicIDType = String;
 
