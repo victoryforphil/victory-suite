@@ -41,7 +41,7 @@ export class PubSubAdminServiceClient {
 
   methodDescriptorRequestChannels = new grpcWeb.MethodDescriptor(
     '/pubsub_admin.PubSubAdminService/RequestChannels',
-    grpcWeb.MethodType.UNARY,
+    grpcWeb.MethodType.SERVER_STREAMING,
     pubsub_admin_pb.ChannelRequest,
     pubsub_admin_pb.ChannelResponse,
     (request: pubsub_admin_pb.ChannelRequest) => {
@@ -52,34 +52,13 @@ export class PubSubAdminServiceClient {
 
   requestChannels(
     request: pubsub_admin_pb.ChannelRequest,
-    metadata?: grpcWeb.Metadata | null): Promise<pubsub_admin_pb.ChannelResponse>;
-
-  requestChannels(
-    request: pubsub_admin_pb.ChannelRequest,
-    metadata: grpcWeb.Metadata | null,
-    callback: (err: grpcWeb.RpcError,
-               response: pubsub_admin_pb.ChannelResponse) => void): grpcWeb.ClientReadableStream<pubsub_admin_pb.ChannelResponse>;
-
-  requestChannels(
-    request: pubsub_admin_pb.ChannelRequest,
-    metadata?: grpcWeb.Metadata | null,
-    callback?: (err: grpcWeb.RpcError,
-               response: pubsub_admin_pb.ChannelResponse) => void) {
-    if (callback !== undefined) {
-      return this.client_.rpcCall(
-        this.hostname_ +
-          '/pubsub_admin.PubSubAdminService/RequestChannels',
-        request,
-        metadata || {},
-        this.methodDescriptorRequestChannels,
-        callback);
-    }
-    return this.client_.unaryCall(
-    this.hostname_ +
-      '/pubsub_admin.PubSubAdminService/RequestChannels',
-    request,
-    metadata || {},
-    this.methodDescriptorRequestChannels);
+    metadata?: grpcWeb.Metadata): grpcWeb.ClientReadableStream<pubsub_admin_pb.ChannelResponse> {
+    return this.client_.serverStreaming(
+      this.hostname_ +
+        '/pubsub_admin.PubSubAdminService/RequestChannels',
+      request,
+      metadata || {},
+      this.methodDescriptorRequestChannels);
   }
 
 }
