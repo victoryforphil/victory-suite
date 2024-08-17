@@ -28,8 +28,14 @@ async fn main() {
             .lock()
             .await
             .client_write(0, vec![PubSubMessage::Register()]);
+
+        info!("Registering adapter");
+        adapter
+            .lock()
+            .await
+            .client_write(1, vec![PubSubMessage::Register()]);
     }
-    let server = Arc::new(Mutex::new(server));
+    let server = Arc::new(tokio::sync::RwLock::new(server));
 
     AdminServer::start(server.clone()).await.unwrap();
 
@@ -38,7 +44,7 @@ async fn main() {
     loop {
         info!("[Main] Tick");
         interval.tick().await;
-        let mut server = server.lock().unwrap();
+        let mut server = server.write().await;
         server.tick();
         tick_count += 1;
         let start_time = VicInstant::now();
@@ -57,17 +63,30 @@ async fn main() {
                 adapter.lock().await.client_write(
                     1,
                     vec![PubSubMessage::Publish(PublishMessage::primitive(
-                        &TopicKey::from_str("test"),
+                        &TopicKey::from_str(format!("test{}", tick_count).as_str()),
                         Arc::new(start_time.clone() + VicDuration::new_secs(tick_count as f64)),
                         tick_count.into(),
                     ))],
                 );
             }
+
+            12..=500 => {
+                for i in 0..10 {
+                    adapter.lock().await.client_write(
+                        1,
+                        vec![PubSubMessage::Publish(PublishMessage::primitive(
+                            &TopicKey::from_str("test"),
+                            Arc::new(
+                                start_time.clone() + VicDuration::new_secs((tick_count + i) as f64),
+                            ),
+                            tick_count.into(),
+                        ))],
+                    );
+                }
+            }
+
             _ => {}
         }
-
-        //
-        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
 #[cfg(test)]
