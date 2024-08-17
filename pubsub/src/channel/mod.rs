@@ -12,6 +12,7 @@ use thiserror::Error;
 use crate::{
     client::{PubSubClientHandle, PubSubClientIDType},
     messages::UpdateMessage,
+    MutexType,
 };
 
 #[derive(Clone)]
@@ -23,7 +24,7 @@ pub struct PubSubChannel {
     pub update_queue: HashMap<PubSubClientIDType, UpdateMessage>,
 }
 
-pub type PubSubChannelHandle = Arc<Mutex<PubSubChannel>>;
+pub type PubSubChannelHandle = MutexType<PubSubChannel>;
 
 #[derive(Error, Debug)]
 pub enum PubSubChannelError {
@@ -63,12 +64,12 @@ impl PubSubChannel {
         })
     }
     pub fn handle(&self) -> PubSubChannelHandle {
-        Arc::new(Mutex::new(self.clone()))
+        Arc::new(tokio::sync::Mutex::new(self.clone()))
     }
     pub fn add_publisher(&mut self, client: PubSubClientHandle) {
         debug!(
             "Adding publisher to PubSubChannel: {}",
-            client.lock().unwrap().id
+            client.try_lock().unwrap().id
         );
         self.publishers.push(client);
     }
@@ -91,7 +92,7 @@ impl PubSubChannel {
         for sub in self.subscribers.iter() {
             let value = bucket.get_latest_datapoint().unwrap();
             let update = UpdateMessage::new(value.clone());
-            self.update_queue.insert(sub.lock().unwrap().id, update);
+            self.update_queue.insert(sub.try_lock().unwrap().id, update);
         }
     }
 
@@ -109,11 +110,11 @@ impl PubSubChannel {
     pub fn add_subscriber(&mut self, client: PubSubClientHandle) {
         debug!(
             "Adding subscriber to PubSubChannel: {}",
-            client.lock().unwrap().id
+            client.try_lock().unwrap().id
         );
 
         client
-            .lock()
+            .try_lock()
             .unwrap()
             .subscriptions
             .push(self.topic.clone());
