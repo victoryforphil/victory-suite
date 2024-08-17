@@ -38,13 +38,6 @@ const data = [
 
 export function NavbarSimple() {
   const [active, setActive] = useState("Billing");
-  const [client, setClient] = useState(null);
-
-  useEffect(() => {
-    console.log("Connecting to broker admin service");
-    const client = new PubSubAdminServiceClient("http://0.0.0.0:5050");
-    setClient(client);
-  }, []);
 
   const links = data.map((item) => (
     <a
@@ -63,22 +56,13 @@ export function NavbarSimple() {
   ));
 
   useEffect(() => {
-    if (active === "Channels") onChannels();
+
   }, [active]);
 
-  const onChannels = () => {
-    console.log("Channels");
-    const request = new AdminPB.ChannelRequest();
-    client.requestChannels(request).then((response) => {
-      console.log(response);
-    });
-  };
   return (
     <nav className={classes.navbar}>
       <div className={classes.navbarMain}>
-        <Group className={classes.header} justify="space-between">
-          <h1>Victory Broker Admin</h1>
-        </Group>
+      
         {links}
       </div>
 

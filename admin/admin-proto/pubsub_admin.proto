@@ -3,7 +3,7 @@ package pubsub_admin;
 
 
 service PubSubAdminService{
-    rpc RequestChannels(ChannelRequest) returns (ChannelResponse);
+    rpc RequestChannels(ChannelRequest) returns (stream ChannelResponse);
 }
 message ChannelRequest{
 
