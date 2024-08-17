@@ -37,7 +37,7 @@ impl PubSubServer {
             datastore: Datastore::new(),
         }
     }
-
+   
     pub fn add_adapter(&mut self, adapter: PubSubAdapterHandle) {
         self.adapters.push(adapter);
     }
@@ -81,13 +81,18 @@ impl PubSubServer {
         let mut to_send: HashMap<PubSubClientIDType, Vec<PubSubMessage>> = HashMap::new();
         for channel in self.channels.values() {
             let mut channel = channel.try_lock().unwrap();
-            let updates = channel.get_updates();
-            for (client_id, update) in updates {
-                to_send
-                    .entry(client_id)
-                    .or_insert_with(Vec::new)
-                    .push(PubSubMessage::Update(UpdateMessage::new(update.messages)));
+            let subscribers = channel.subscribers.clone();
+            for subscriber in subscribers.iter() {
+                let subscriber = subscriber.try_lock().unwrap();
+                let updates = channel.get_updates(subscriber.id);
+                for update in updates {
+                    to_send
+                        .entry(subscriber.id)
+                        .or_insert_with(Vec::new)
+                        .push(PubSubMessage::Update(update.clone()));
+                }
             }
+            
         }
 
         for adapter in self.adapters.iter_mut() {

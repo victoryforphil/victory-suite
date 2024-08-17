@@ -32,16 +32,26 @@ const data = [
 
 ];
 
+let doOnce = true;
 export function ChannelsTable() {
 
     const [channels, setChannels] = useState([]);
+    const [stream, setStream] = useState(null);
     useEffect(() => {
+
+        if (!doOnce) {
+            return;
+        }
+
+        doOnce = false;
         console.log("Connecting to broker admin service");
         const client = new PubSubAdminServiceClient("http://0.0.0.0:5050");
         const request = new AdminPB.ChannelRequest();
 
-        const stream = client.requestChannels(request);
-        stream.on("data", (response) => {
+        const steam = client.requestChannels(request);
+      
+        steam.on("data", (response) => {
+            console.log("Received data");
             const channels = response.getChannelsList().map((channel) => {
                 console.log(channel);
                 return {
@@ -55,38 +65,33 @@ export function ChannelsTable() {
             console.dir(channels)
         });
 
-        stream.on("end", () => {
-            console.log("Stream ended");
-        });
-
-        stream.on("status", (status) => {   
-            console.log("Stream status", status);
-        });
+        
 
     }, []);
 
 
-    const card = (channel) => (
-        <Card withBorder radius="md" padding="xl" bg="var(--mantine-color-body)" key={channel.topic}>
-            <Text fz="xs" tt="uppercase" fw={700} c="dimmed">
-                {channel.topic}
-            </Text>
-            <Text fz="lg" fw={500}>
-                $5.431 / $10.000
-            </Text>
-            <Progress value={54.31} mt="md" size="lg" radius="xl" />
-        </Card>
+    const row = (channel) => (
+        <Table.Tr key={channel.topic}>
+            <Table.Td><Code>{channel.topic}</Code></Table.Td>
+            <Table.Td>{channel.publishers.join(", ")}</Table.Td>
+            <Table.Td>{channel.subscribers.join(", ")}</Table.Td>
+            <Table.Td><Progress value={channel.message_count}></Progress></Table.Td>
+      </Table.Tr>
     );
     
-    const renderCards = () => {
-        return channels.map((channel) => {
-            return card(channel);
-        });
-    }
+    const rows = channels.map(row);
 
     return (
-        <SimpleGrid cols={3} >
-            {renderCards()}
-        </SimpleGrid>
+        <Table>
+      <Table.Thead>
+        <Table.Tr>
+            <Table.Th>Topic</Table.Th>
+            <Table.Th>Publishers</Table.Th>
+            <Table.Th>Subscribers</Table.Th>
+            <Table.Th>Message Count</Table.Th>
+        </Table.Tr>
+      </Table.Thead>
+      <Table.Tbody>{rows}</Table.Tbody>
+    </Table>
     )
 }
