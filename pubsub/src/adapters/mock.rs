@@ -1,0 +1,65 @@
+use std::collections::HashMap;
+
+use log::debug;
+
+use crate::{client::PubSubClientIDType, messages::PubSubMessage};
+
+use super::PubSubAdapter;
+
+pub struct MockPubSubAdapter {
+    read_buffer: HashMap<PubSubClientIDType, Vec<PubSubMessage>>,
+    write_buffer: HashMap<PubSubClientIDType, Vec<PubSubMessage>>,
+}
+
+impl MockPubSubAdapter {
+    pub fn new() -> Self {
+        MockPubSubAdapter {
+            read_buffer: HashMap::new(),
+            write_buffer: HashMap::new(),
+        }
+    }
+
+    pub fn client_read(&mut self, client_id: PubSubClientIDType) -> Vec<PubSubMessage> {
+        debug!("MockPubSubAdapter::client_read: client_id={}", client_id);
+        self.write_buffer
+            .remove(&client_id)
+            .unwrap_or_else(Vec::new)
+    }
+
+    pub fn client_write(&mut self, client_id: PubSubClientIDType, messages: Vec<PubSubMessage>) {
+        debug!(
+            "MockPubSubAdapter::client_write: client_id={}, messages={:?}",
+            client_id, messages
+        );
+        self.read_buffer
+            .entry(client_id)
+            .or_insert_with(Vec::new)
+            .extend(messages);
+    }
+}
+
+impl PubSubAdapter for MockPubSubAdapter {
+    fn read(&mut self) -> HashMap<PubSubClientIDType, Vec<PubSubMessage>> {
+        // Drain read the buffer
+        let mut buffer = HashMap::new();
+        std::mem::swap(&mut self.read_buffer, &mut buffer);
+        buffer
+    }
+
+    fn write(&mut self, to_send: HashMap<PubSubClientIDType, Vec<PubSubMessage>>) {
+        for (client_id, messages) in to_send {
+            debug!(
+                "MockPubSubAdapter::write: client_id={}, messages={:?}",
+                client_id, messages
+            );
+            self.write_buffer
+                .entry(client_id)
+                .or_insert_with(Vec::new)
+                .extend(messages);
+        }
+        debug!(
+            "Current mock adapter write buffer size: {}",
+            self.write_buffer.len()
+        );
+    }
+}
