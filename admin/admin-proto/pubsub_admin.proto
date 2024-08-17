@@ -1,0 +1,20 @@
+syntax = "proto3";
+package pubsub_admin;
+
+
+service PubSubAdminService{
+    rpc RequestChannels(ChannelRequest) returns (ChannelResponse);
+}
+message ChannelRequest{
+
+}
+message ChannelResponse{
+    repeated PubSubChannel channels = 1;
+}
+
+message PubSubChannel{
+    string topic = 1;
+    repeated string subscribers = 2;
+    repeated string publishers = 3;
+    int32 message_count = 4;
+}
