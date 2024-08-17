@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@esbuild/linux-x64": "^0.23.1",
     "@mantine/charts": "^7.12.1",
     "@mantine/code-highlight": "^7.12.1",
     "@mantine/core": "^7.12.1",
