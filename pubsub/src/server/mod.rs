@@ -7,7 +7,6 @@ use std::{
 
 use datastore::{
     database::Datastore,
-    datapoints::Datapoint,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
 use log::{debug, info};
