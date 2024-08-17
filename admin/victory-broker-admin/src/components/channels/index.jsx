@@ -39,7 +39,9 @@ export function ChannelsTable() {
         console.log("Connecting to broker admin service");
         const client = new PubSubAdminServiceClient("http://0.0.0.0:5050");
         const request = new AdminPB.ChannelRequest();
-        client.requestChannels(request).then((response) => {
+
+        const stream = client.requestChannels(request);
+        stream.on("data", (response) => {
             const channels = response.getChannelsList().map((channel) => {
                 console.log(channel);
                 return {
@@ -52,6 +54,15 @@ export function ChannelsTable() {
             setChannels(channels);
             console.dir(channels)
         });
+
+        stream.on("end", () => {
+            console.log("Stream ended");
+        });
+
+        stream.on("status", (status) => {   
+            console.log("Stream status", status);
+        });
+
     }, []);
 
 
