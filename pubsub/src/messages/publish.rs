@@ -1,7 +1,7 @@
 use datastore::{
     datapoints::Datapoint,
     primitives::{timestamp::VicInstantHandle, Primitives},
-    topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
+    topics::{TopicKeyHandle, TopicKeyProvider},
 };
 #[derive(Debug, Clone)]
 pub struct PublishMessage {

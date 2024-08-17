@@ -11,7 +11,7 @@ use thiserror::Error;
 
 use crate::{
     client::{PubSubClientHandle, PubSubClientIDType},
-    messages::{PublishMessage, UpdateMessage},
+    messages::UpdateMessage,
 };
 
 #[derive(Clone)]

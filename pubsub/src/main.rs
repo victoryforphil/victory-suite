@@ -7,7 +7,7 @@ use datastore::{
 
 use log::info;
 use pubsub::{
-    adapters::{mock::MockPubSubAdapter, PubSubAdapterHandle},
+    adapters::mock::MockPubSubAdapter,
     messages::*,
     server::PubSubServer,
 };
@@ -71,9 +71,9 @@ fn main() {
 
 mod tests {
     use super::*;
-    use datastore::topics::TopicKey;
-    use pubsub::client::PubSubClientIDType;
-    use std::sync::{Arc, Mutex};
+    
+    
+    
 
     #[test]
     fn test_pubsub_server() {

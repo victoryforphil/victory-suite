@@ -1,14 +1,13 @@
 pub mod mock;
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     sync::{Arc, Mutex},
 };
 
-use datastore::{datapoints::Datapoint, topics::TopicKeyHandle};
 
 use crate::{
-    client::{PubSubClientHandle, PubSubClientIDType},
+    client::PubSubClientIDType,
     messages::PubSubMessage,
 };
 
