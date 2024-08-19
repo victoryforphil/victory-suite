@@ -1,0 +1,53 @@
+{
+  "name": "victory-broker-admin",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mantine/charts": "^7.12.1",
+    "@mantine/code-highlight": "^7.12.1",
+    "@mantine/core": "^7.12.1",
+    "@mantine/dates": "^7.12.1",
+    "@mantine/dropzone": "^7.12.1",
+    "@mantine/form": "^7.12.1",
+    "@mantine/hooks": "^7.12.1",
+    "@mantine/modals": "^7.12.1",
+    "@mantine/notifications": "^7.12.1",
+    "@mantine/nprogress": "^7.12.1",
+    "@mantine/spotlight": "^7.12.1",
+    "@mantine/tiptap": "^7.12.1",
+    "@mantinex/mantine-logo": "^1.0.1",
+    "@originjs/vite-plugin-commonjs": "^1.0.3",
+    "@tabler/icons-react": "^3.12.0",
+    "@tiptap/extension-link": "^2.6.4",
+    "@tiptap/react": "^2.6.4",
+    "admin-grpc-gen": "file:admin-proto-gen",
+    "dayjs": "^1.11.12",
+    "dockview": "^1.15.2",
+    "google-protobuf": "~3.21.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.3",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "eslint-plugin-react-refresh": "^0.4.7",
+    "postcss": "^8.4.38",
+    "postcss-preset-mantine": "1.17.0",
+    "postcss-simple-vars": "^7.0.1",
+    "vite": "^5.3.4"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.9.5"
+  }
+}

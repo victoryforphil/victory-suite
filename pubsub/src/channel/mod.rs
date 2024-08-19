@@ -12,6 +12,7 @@ use thiserror::Error;
 use crate::{
     client::{PubSubClientHandle, PubSubClientIDType},
     messages::UpdateMessage,
+    MutexType,
 };
 
 #[derive(Clone)]
@@ -20,10 +21,10 @@ pub struct PubSubChannel {
     pub bucket: BucketHandle,
     pub publishers: Vec<PubSubClientHandle>,
     pub subscribers: Vec<PubSubClientHandle>,
-    pub update_queue: HashMap<PubSubClientIDType, UpdateMessage>,
+    pub update_queue: HashMap<PubSubClientIDType, Vec<UpdateMessage>>,
 }
 
-pub type PubSubChannelHandle = Arc<Mutex<PubSubChannel>>;
+pub type PubSubChannelHandle = MutexType<PubSubChannel>;
 
 #[derive(Error, Debug)]
 pub enum PubSubChannelError {
@@ -63,12 +64,12 @@ impl PubSubChannel {
         })
     }
     pub fn handle(&self) -> PubSubChannelHandle {
-        Arc::new(Mutex::new(self.clone()))
+        Arc::new(tokio::sync::Mutex::new(self.clone()))
     }
     pub fn add_publisher(&mut self, client: PubSubClientHandle) {
         debug!(
             "Adding publisher to PubSubChannel: {}",
-            client.lock().unwrap().id
+            client.try_lock().unwrap().id
         );
         self.publishers.push(client);
     }
@@ -83,6 +84,13 @@ impl PubSubChannel {
         }
         self.on_update();
     }
+    pub fn get_queue_size(&self) -> usize {
+        let mut size = 0;
+        for (_, updates) in self.update_queue.iter() {
+            size += updates.len();
+        }
+        size
+    }
 
     fn on_update(&mut self) {
         debug!("Updating message to PubSubChannel: {}", self.topic);
@@ -91,29 +99,30 @@ impl PubSubChannel {
         for sub in self.subscribers.iter() {
             let value = bucket.get_latest_datapoint().unwrap();
             let update = UpdateMessage::new(value.clone());
-            self.update_queue.insert(sub.lock().unwrap().id, update);
+            self.update_queue
+                .entry(sub.try_lock().unwrap().id)
+                .or_insert_with(Vec::new)
+                .push(update);
         }
     }
 
-    pub fn get_updates(&mut self) -> HashMap<PubSubClientIDType, UpdateMessage> {
-        let updates = self.update_queue.clone();
-        debug!(
-            "Found {} updates for PubSubChannel: {}",
-            updates.len(),
-            self.topic
-        );
-        self.update_queue.clear();
-        updates
+    pub fn get_updates(&mut self, client_id: PubSubClientIDType) -> Vec<UpdateMessage> {
+        debug!("Getting updates for PubSubChannel: {}", self.topic);
+        let updates = self.update_queue.remove(&client_id);
+        match updates {
+            Some(updates) => updates,
+            None => Vec::new(),
+        }
     }
 
     pub fn add_subscriber(&mut self, client: PubSubClientHandle) {
         debug!(
             "Adding subscriber to PubSubChannel: {}",
-            client.lock().unwrap().id
+            client.try_lock().unwrap().id
         );
 
         client
-            .lock()
+            .try_lock()
             .unwrap()
             .subscriptions
             .push(self.topic.clone());

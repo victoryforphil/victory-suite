@@ -2,6 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use datastore::topics::TopicKeyHandle;
 
+use crate::MutexType;
+
 pub type PubSubClientIDType = u16;
 
 pub struct PubSubClient {
@@ -20,4 +22,4 @@ impl PubSubClient {
     }
 }
 
-pub type PubSubClientHandle = Arc<Mutex<PubSubClient>>;
+pub type PubSubClientHandle = MutexType<PubSubClient>;
