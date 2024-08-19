@@ -9,6 +9,7 @@ import {
   ActionIcon,
   Tooltip,
   rem,
+  Card,
 } from "@mantine/core";
 import {
   IconBellRinging,
@@ -36,8 +37,9 @@ const data = [
   { link: "", label: "Data", icon: IconDatabase },
 ];
 
-export function NavbarSimple() {
+export function NavbarSimple({ onConnect, states }) {
   const [active, setActive] = useState("Billing");
+  const [url, setUrl] = useState("http://localhost:5050");
 
   const links = data.map((item) => (
     <a
@@ -52,17 +54,24 @@ export function NavbarSimple() {
     >
       <item.icon className={classes.linkIcon} stroke={1.5} />
       <span>{item.label}</span>
+      <hr />
+      {states.statuses[item.label] == 2 ? <Badge color="green" variant="dot">Connected</Badge> : <Badge color="red" variant="dot">Disconnected</Badge>}
     </a>
   ));
 
-  useEffect(() => {
 
-  }, [active]);
+
+  const onConnectClick = (event) => {
+    event.preventDefault();
+    console.log("Connecting to broker admin service: " + url);
+    onConnect(url);
+  }
+
+
 
   return (
     <nav className={classes.navbar}>
       <div className={classes.navbarMain}>
-      
         {links}
       </div>
 
@@ -70,6 +79,9 @@ export function NavbarSimple() {
         <TextInput
           placeholder="Broker Admin URL"
           size="xs"
+          defaultValue={url}
+
+          onChange={(event) => setUrl(event.target.value)}
           leftSection={
             <IconCloudNetwork
               style={{ width: rem(12), height: rem(12) }}
@@ -83,11 +95,14 @@ export function NavbarSimple() {
         <a
           href="#"
           className={classes.link}
-          onClick={(event) => event.preventDefault()}
+          onClick={onConnectClick}
+          data-active={states.loading || undefined}
         >
           <IconLogout className={classes.linkIcon} stroke={1.5} />
-          <span>Connect</span>
+          <span>{states.loading ? "Connecting..." : states.connected ? "Disconnect" : "Connect"}</span>
         </a>
+
+
       </div>
     </nav>
   );
