@@ -64,7 +64,7 @@ impl pubsub_admin::pub_sub_admin_service_server::PubSubAdminService for PubSubAd
                         break;
                     }
                 }
-                tokio::time::sleep(Duration::from_millis(250)).await;
+                tokio::time::sleep(Duration::from_millis(500)).await;
             }
             println!("\tclient disconnected");
         });
