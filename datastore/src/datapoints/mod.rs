@@ -1,3 +1,8 @@
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, RwLock},
+};
+
 use crate::{
     primitives::{timestamp::VicInstantHandle, Primitives},
     topics::{TopicKeyHandle, TopicKeyProvider},
@@ -8,6 +13,10 @@ pub struct Datapoint {
     pub time: VicInstantHandle,
     pub value: Primitives,
 }
+
+pub type DatapointMap = BTreeMap<TopicKeyHandle, Datapoint>;
+
+pub type DatapointHandle = Arc<RwLock<Datapoint>>;
 
 impl Datapoint {
     pub fn new<T: TopicKeyProvider>(
