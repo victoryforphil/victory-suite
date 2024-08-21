@@ -130,6 +130,7 @@ impl From<Arc<VicInstant>> for VicInstant {
         handle.as_ref().clone()
     }
 }
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VicDuration {
     pub time: VicTimecode,

@@ -87,6 +87,18 @@ impl Datastore {
         let bucket = bucket.read().unwrap();
         Ok(bucket.get_datapoints())
     }
+
+    pub fn get_updated_keys<T: TopicKeyProvider>(
+        &self,
+        topic: &T,
+        time: &VicInstant,
+    ) -> Result<Vec<TopicKeyHandle>, DatastoreError> {
+        let topic = topic.handle();
+        let bucket = self.get_bucket(&topic)?;
+        let bucket = bucket.read().unwrap();
+        let new_values = bucket.get_data_points_after(&time.handle());
+        Ok(new_values.iter().map(|v| v.topic.handle()).collect())
+    }
 }
 
 #[cfg(test)]
