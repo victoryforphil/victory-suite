@@ -1,2 +1,2 @@
 [workspace]
-members = [ "admin","datastore", "launcher", "pubsub"]
+members = ["admin", "datastore", "launcher", "pubsub"]

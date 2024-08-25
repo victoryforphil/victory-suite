@@ -138,6 +138,18 @@ impl From<&str> for TopicKey {
         TopicKey::from_str(value)
     }
 }
+
+impl From<String> for TopicKey {
+    fn from(value: String) -> Self {
+        TopicKey::from_str(&value)
+    }
+}
+
+impl From<&String> for TopicKey {
+    fn from(value: &String) -> Self {
+        TopicKey::from_str(value)
+    }
+}
 // Test
 #[cfg(test)]
 mod tests {

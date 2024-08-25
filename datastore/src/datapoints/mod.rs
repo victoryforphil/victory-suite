@@ -4,7 +4,8 @@ use std::{
 };
 
 use crate::{
-    primitives::{timestamp::VicInstantHandle, Primitives},
+    primitives::Primitives,
+    time::VicInstantHandle,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
 #[derive(Debug, Clone)]
@@ -36,13 +37,15 @@ impl Datapoint {
 mod tests {
     use crate::{
         datapoints::Datapoint,
-        primitives::{timestamp::VicInstant, Primitives},
+        primitives::Primitives,
+        time::VicInstant,
         topics::{TopicKey, TopicKeyProvider},
     };
     #[test]
     fn test_datapoint() {
         let topic = TopicKey::from_str("test_topic");
-        let time = VicInstant::now();
+        let now = VicInstant::now();
+        let time = now;
         let value = Primitives::Integer(42);
         let datapoint = Datapoint::new(&topic, time.handle(), value);
         assert_eq!(datapoint.topic.key(), &TopicKey::from_str("test_topic"));

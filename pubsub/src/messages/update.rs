@@ -1,8 +1,11 @@
 use datastore::{
     datapoints::Datapoint,
-    primitives::{timestamp::VicInstantHandle, Primitives},
+    primitives::Primitives,
+    time::VicInstantHandle,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
+
+use super::PubSubMessage;
 #[derive(Debug, Clone)]
 pub struct UpdateMessage {
     pub topic: TopicKeyHandle,
@@ -25,6 +28,33 @@ impl UpdateMessage {
         UpdateMessage {
             topic: topic.handle(),
             messages: Datapoint::new(topic, time, value),
+        }
+    }
+}
+
+impl From<UpdateMessage> for Datapoint {
+    fn from(message: UpdateMessage) -> Self {
+        message.messages
+    }
+}
+
+impl From<Datapoint> for UpdateMessage {
+    fn from(message: Datapoint) -> Self {
+        UpdateMessage::new(message)
+    }
+}
+
+impl From<UpdateMessage> for PubSubMessage {
+    fn from(message: UpdateMessage) -> Self {
+        PubSubMessage::Update(message)
+    }
+}
+
+impl From<PubSubMessage> for UpdateMessage {
+    fn from(message: PubSubMessage) -> Self {
+        match message {
+            PubSubMessage::Update(update) => update,
+            _ => panic!("Invalid conversion from PubSubMessage to UpdateMessage"),
         }
     }
 }

@@ -1,13 +1,10 @@
-
 use log::info;
 
 use pubsub::server::PubSubServerHandle;
 use tonic::transport::Server;
 
 use crate::{
-    proto::pubsub_admin::{
-        pub_sub_admin_service_server::PubSubAdminServiceServer,
-    },
+    proto::pubsub_admin::pub_sub_admin_service_server::PubSubAdminServiceServer,
     services::pubsub::PubSubAdmin,
 };
 

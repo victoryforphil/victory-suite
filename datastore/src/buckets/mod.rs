@@ -7,7 +7,8 @@ use log::{debug, trace};
 
 use crate::{
     datapoints::Datapoint,
-    primitives::{timestamp::VicInstantHandle, Primitives},
+    primitives::Primitives,
+    time::VicInstantHandle,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
 #[derive(Debug)]
@@ -104,10 +105,8 @@ mod tests {
     use crate::{
         buckets::Bucket,
         datapoints::Datapoint,
-        primitives::{
-            timestamp::{VicInstant, VicTimecode},
-            Primitives,
-        },
+        primitives::Primitives,
+        time::{VicInstant, VicTimecode},
         topics::{TopicKey, TopicKeyProvider},
     };
 

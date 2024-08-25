@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use datastore::{
     buckets::BucketHandle, database::Datastore, datapoints::Datapoint, topics::TopicKeyHandle,
