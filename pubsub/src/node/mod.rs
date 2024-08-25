@@ -110,15 +110,16 @@ mod tests {
     use crate::messages::UpdateMessage;
 
     use super::*;
-    use datastore::primitives::timestamp::{VicInstant, VicTimecode};
-    use datastore::topics::{TopicKey, TopicKeySection};
+
+    use datastore::time::{VicInstant, VicTimecode};
+    use datastore::topics::TopicKey;
     use log::info;
     use tokio::sync::Mutex;
 
     use std::sync::mpsc::{channel, Sender};
     use std::sync::Arc;
-    use std::time::Duration;
-    use std::{thread, vec};
+    
+    use std::vec;
 
     struct TestSubCallback {
         sender: Sender<DatapointMap>,
@@ -147,12 +148,12 @@ mod tests {
         let adapter = Arc::new(Mutex::new(MockPubSubAdapter::new()));
         let mut node = Node::new(1, "test".to_string(), adapter.clone());
 
-        let topic = TopicKey::from_str("test/topic");
+        let topic: TopicKey = "test/topic".into();
         let (tx, rx) = channel();
         let callback = TestSubCallback { sender: tx };
         let datapoint = Datapoint::new(
             &topic.clone(),
-            VicInstant::new(VicTimecode::new_secs(2.0)).handle(),
+            VicInstant::new_secs(1.0).handle(),
             "test".into(),
         );
         node.publish_datapoint(&datapoint);

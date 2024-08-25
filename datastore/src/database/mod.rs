@@ -1,7 +1,8 @@
 use crate::{
     buckets::{Bucket, BucketHandle},
     datapoints::Datapoint,
-    primitives::{timestamp::VicInstant, Primitives},
+    primitives::Primitives,
+    time::VicInstant,
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
 use std::collections::{BTreeMap, BTreeSet};

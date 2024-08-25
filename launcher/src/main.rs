@@ -1,18 +1,9 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::sync::Arc;
 
-use admin::{admin_server::AdminServer, proto::pubsub_admin};
-use datastore::{
-    primitives::timestamp::{VicDuration, VicInstant},
-    topics::TopicKey,
-};
+
 pub type MutexType<T> = Arc<tokio::sync::Mutex<T>>;
 pub type RwLockType<T> = Arc<tokio::sync::RwLock<T>>;
 
-use log::{debug, info};
-use pubsub::{adapters::mock::MockPubSubAdapter, messages::*, server::PubSubServer};
 
 #[tokio::main]
 async fn main() {

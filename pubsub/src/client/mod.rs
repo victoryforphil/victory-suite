@@ -1,4 +1,3 @@
-
 use datastore::topics::TopicKeyHandle;
 
 use crate::MutexType;

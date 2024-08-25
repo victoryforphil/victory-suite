@@ -1,4 +1,4 @@
-use datastore::primitives::timestamp::VicDuration;
+use datastore::time::VicDuration;
 
 #[derive(Debug, Clone)]
 pub struct PubSubServerConfig {
