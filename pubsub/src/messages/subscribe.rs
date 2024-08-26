@@ -1,7 +1,7 @@
-use datastore::topics::TopicKey;
-
 use super::PubSubMessage;
-#[derive(Debug, Clone)]
+use datastore::topics::TopicKey;
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubscribeMessage {
     pub topic: TopicKey,
 }

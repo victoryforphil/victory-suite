@@ -6,7 +6,8 @@ use datastore::{
 };
 
 use super::PubSubMessage;
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublishMessage {
     pub topic: TopicKeyHandle,
     pub messages: Vec<Datapoint>,

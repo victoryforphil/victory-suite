@@ -118,7 +118,7 @@ mod tests {
 
     use std::sync::mpsc::{channel, Sender};
     use std::sync::Arc;
-    
+
     use std::vec;
 
     struct TestSubCallback {

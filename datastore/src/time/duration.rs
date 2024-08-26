@@ -1,7 +1,6 @@
-
 use super::VicTimecode;
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct VicDuration {
     pub time: VicTimecode,
 }

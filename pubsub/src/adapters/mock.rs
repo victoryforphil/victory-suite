@@ -54,4 +54,8 @@ impl PubSubAdapter for MockPubSubAdapter {
 
         debug!("Mock Write Buffer Length {:?}", self.write_buffer.len());
     }
+
+    fn get_name(&self) -> String {
+        "MockPubSubAdapter".to_string()
+    }
 }
