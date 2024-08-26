@@ -8,7 +8,8 @@ use crate::{
     time::VicInstantHandle,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Datapoint {
     pub topic: TopicKeyHandle,
     pub time: VicInstantHandle,

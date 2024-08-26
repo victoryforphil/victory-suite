@@ -1,14 +1,13 @@
 use std::{ops::Add, sync::Arc, time::Instant};
 
 use super::{VicDuration, VicTimecode};
-
+use serde::{Deserialize, Serialize};
 pub type VicInstantHandle = Arc<VicInstant>;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct VicInstant {
     pub time: VicTimecode,
 }
-
 impl Default for VicInstant {
     fn default() -> Self {
         VicInstant {

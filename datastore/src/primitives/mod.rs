@@ -8,8 +8,8 @@ use crate::{
 pub mod blob;
 pub mod integer;
 pub mod string;
-
-#[derive(Debug, Clone, PartialEq)]
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Primitives {
     Instant(VicInstant),
     Duration(VicDuration),

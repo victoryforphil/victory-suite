@@ -1,7 +1,6 @@
 use crate::proto::pubsub_admin::{self, ChannelResponse, PubSubChannel};
 use std::time::Duration;
 
-use log::info;
 
 use pubsub::server::PubSubServerHandle;
 use tokio_stream::{wrappers::ReceiverStream, StreamExt};
@@ -26,7 +25,6 @@ impl pubsub_admin::pub_sub_admin_service_server::PubSubAdminService for PubSubAd
     ) -> Result<Response<Self::RequestChannelsStream>, Status> {
         let (tx, rx) = tokio::sync::mpsc::channel(12);
 
-        println!("EchoServer::server_streaming_echo");
         let server = self.server.clone();
 
         tokio::spawn(async move {
@@ -59,18 +57,16 @@ impl pubsub_admin::pub_sub_admin_service_server::PubSubAdminService for PubSubAd
                 };
                 match tx.send(Ok(response)).await {
                     Ok(_) => {
-                        info!("\titem sent to client");
+
                         // item (server response) was queued to be send to client
                     }
                     Err(_item) => {
-                        info!("\tclient disconnected");
                         // output_stream was build from rx and both are dropped
                         break;
                     }
                 }
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
-            println!("\tclient disconnected");
         });
 
         let output_stream = ReceiverStream::new(rx);

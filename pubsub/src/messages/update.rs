@@ -1,12 +1,12 @@
+use super::PubSubMessage;
 use datastore::{
     datapoints::Datapoint,
     primitives::Primitives,
     time::VicInstantHandle,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
-
-use super::PubSubMessage;
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateMessage {
     pub topic: TopicKeyHandle,
     pub messages: Datapoint,
