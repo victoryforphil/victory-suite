@@ -4,7 +4,23 @@ package pubsub_admin;
 
 service PubSubAdminService{
     rpc RequestChannels(ChannelRequest) returns (stream ChannelResponse);
+    rpc RequestAdapters(AdapterRequest) returns (stream AdapterResponse);
 }
+message AdapterRequest{
+    float hz = 1;
+}
+
+message AdapterResponse{
+    repeated Adapter adapters = 1;
+}
+
+message Adapter{
+    string name = 1;
+    bool live = 2;
+    string description = 3;
+    repeated string stats = 4;
+}
+
 message ChannelRequest{
 
 }

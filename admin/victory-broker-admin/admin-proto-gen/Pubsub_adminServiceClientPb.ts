@@ -61,5 +61,27 @@ export class PubSubAdminServiceClient {
       this.methodDescriptorRequestChannels);
   }
 
+  methodDescriptorRequestAdapters = new grpcWeb.MethodDescriptor(
+    '/pubsub_admin.PubSubAdminService/RequestAdapters',
+    grpcWeb.MethodType.SERVER_STREAMING,
+    pubsub_admin_pb.AdapterRequest,
+    pubsub_admin_pb.AdapterResponse,
+    (request: pubsub_admin_pb.AdapterRequest) => {
+      return request.serializeBinary();
+    },
+    pubsub_admin_pb.AdapterResponse.deserializeBinary
+  );
+
+  requestAdapters(
+    request: pubsub_admin_pb.AdapterRequest,
+    metadata?: grpcWeb.Metadata): grpcWeb.ClientReadableStream<pubsub_admin_pb.AdapterResponse> {
+    return this.client_.serverStreaming(
+      this.hostname_ +
+        '/pubsub_admin.PubSubAdminService/RequestAdapters',
+      request,
+      metadata || {},
+      this.methodDescriptorRequestAdapters);
+  }
+
 }
 
