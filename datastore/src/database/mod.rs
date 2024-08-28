@@ -43,6 +43,26 @@ impl Datastore {
             .ok_or_else(|| DatastoreError::BucketNotFound(topic.key().clone()))
     }
 
+    pub fn get_buckets_matching<T: TopicKeyProvider>(
+        &self,
+        parent_topic: &T,
+    ) -> Result<Vec<BucketHandle>, DatastoreError> {
+        Ok(self
+            .buckets
+            .iter()
+            .filter_map(|(k, v)| {
+                if k.key().is_child_of(parent_topic.key()) {
+                    Some(v.clone())
+                }
+                else if k.key() == parent_topic.key() {
+                    Some(v.clone())
+                }
+                else {
+                    None
+                }
+            })
+            .collect::<Vec<BucketHandle>>())
+    }
     pub fn add_primitive<T: TopicKeyProvider>(
         &mut self,
         topic: &T,
@@ -84,9 +104,14 @@ impl Datastore {
         topic: &T,
     ) -> Result<Vec<Datapoint>, DatastoreError> {
         let topic = topic.handle();
-        let bucket = self.get_bucket(&topic)?;
-        let bucket = bucket.read().unwrap();
-        Ok(bucket.get_datapoints())
+        let buckets = self.get_buckets_matching(&topic)?;
+        let mut datapoints = Vec::new();
+        for bucket in buckets {
+            let bucket = bucket.read().unwrap();
+            datapoints.extend(bucket.get_datapoints());
+        }
+
+        Ok(datapoints)
     }
 
     pub fn get_updated_keys<T: TopicKeyProvider>(
@@ -134,6 +159,47 @@ mod tests {
         let bucket = datastore.get_bucket(&topic);
         assert_eq!(bucket.is_ok(), true);
         assert_eq!(bucket.unwrap().read().unwrap().topic, topic.handle());
+    }
+
+
+    #[test]
+    pub fn test_datastore_get_buckets_matching() {
+        let mut datastore = Datastore::new();
+
+        let topic_parent = TopicKey::from_str("test/topic");
+        let topic_child_a = TopicKey::from_str("test/topic/b");
+        let topic_child_b = TopicKey::from_str("test/topic/a");
+        let topic_other = TopicKey::from_str("other/topic");
+        let topic_other2 = TopicKey::from_str("test/other");
+        let topic_child_a1 = TopicKey::from_str("test/topic/a/1");
+
+        datastore.create_bucket(&topic_parent);
+        datastore.create_bucket(&topic_child_a);
+        datastore.create_bucket(&topic_child_b);
+        datastore.create_bucket(&topic_other);
+        datastore.create_bucket(&topic_other2);
+        datastore.create_bucket(&topic_child_a1);
+
+
+
+        let buckets = datastore.get_buckets_matching(&topic_parent).unwrap();
+        assert_eq!(buckets.len(), 4);
+        for bucket in &buckets {
+            let bucket = bucket.read().unwrap();
+            if bucket.topic.key() == &topic_parent {
+                continue;
+            }
+            assert!(bucket.topic.is_child_of(&topic_parent), "Bucket {:?} is not a child of {:?}", bucket.topic, topic_parent);
+        }
+
+        let keys = buckets.iter().map(|b| b.read().unwrap().topic.key().clone()).collect::<Vec<TopicKey>>();
+        assert!(keys.contains(&topic_child_a));
+        assert!(keys.contains(&topic_child_b));
+        assert!(keys.contains(&topic_child_a1));
+        assert!(!keys.contains(&topic_other));
+        assert!(!keys.contains(&topic_other2));
+        assert!(keys.contains(&topic_parent));
+
     }
 
     #[test]

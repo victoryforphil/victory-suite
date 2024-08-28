@@ -19,6 +19,7 @@ impl Hash for TopicKeySection {
     }
 }
 
+
 impl TopicKeySection {
     pub fn new_existing(id: TopicIDType, display_name: String) -> TopicKeySection {
         TopicKeySection { id, display_name }
@@ -29,11 +30,13 @@ impl TopicKeySection {
         debug!("Generated ID {} for display name {}", id, display_name);
         TopicKeySection { id, display_name }
     }
+
 }
 #[derive(Clone, Eq, Serialize, Deserialize)]
 pub struct TopicKey {
     sections: Vec<TopicKeySection>,
 }
+
 
 // Implement string formatting / printing (dispaly name)
 impl std::fmt::Display for TopicKey {
@@ -125,6 +128,24 @@ impl TopicKey {
             .join("/")
     }
 
+    pub fn is_child_of(&self, parent: &TopicKey) -> bool {
+        if self.sections.len() <= parent.sections.len() {
+            return false;
+        }
+
+        for i in 0..parent.sections.len() {
+            if self.sections[i] != parent.sections[i] {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    pub fn is_parent_of(&self, child: &TopicKey) -> bool {
+        child.is_child_of(self)
+    }
+
     pub fn id(&self) -> TopicIDType {
         let mut hasher = DefaultHasher::new();
         for section in &self.sections {
@@ -164,4 +185,29 @@ mod tests {
         assert_eq!(key.sections[1].display_name, "test");
         assert_eq!(key.sections[0].id, key.sections[1].id);
     }
+
+    #[test]
+    fn test_topic_key_id() {
+        let key = TopicKey::from_str("test/test");
+        assert_eq!(key.id(), TopicKey::from_str("test/test").id());
+    }
+
+    #[test]
+    fn test_topic_key_display_name() {
+        let key = TopicKey::from_str("test/test");
+        assert_eq!(key.display_name(), "test/test");
+    }
+
+    #[test]
+    fn test_topic_key_is_child_of() {
+        let key = TopicKey::from_str("test/test");
+        let parent = TopicKey::from_str("test");
+        let child = TopicKey::from_str("test/test/test");
+        assert!(child.is_child_of(&key));
+        assert!(!key.is_child_of(&child));
+        assert!(!parent.is_child_of(&child));
+    }
+
+
 }
+
