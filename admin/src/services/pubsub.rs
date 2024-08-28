@@ -1,6 +1,7 @@
-use crate::proto::pubsub_admin::{self, ChannelResponse, PubSubChannel};
+use crate::proto::pubsub_admin::{self, Adapter, ChannelResponse, PubSubChannel};
 use std::time::Duration;
 
+use log::info;
 
 use pubsub::server::PubSubServerHandle;
 use tokio_stream::{wrappers::ReceiverStream, StreamExt};
@@ -66,6 +67,54 @@ impl pubsub_admin::pub_sub_admin_service_server::PubSubAdminService for PubSubAd
                     }
                 }
                 tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        });
+
+        let output_stream = ReceiverStream::new(rx);
+        Ok(Response::new(output_stream))
+    }
+
+    type RequestAdaptersStream = ReceiverStream<Result<pubsub_admin::AdapterResponse, Status>>;
+    async fn request_adapters(
+        &self,
+        request: Request<pubsub_admin::AdapterRequest>, // Accept request of type HelloRequest
+    ) -> Result<Response<Self::RequestAdaptersStream>, Status> {
+        let (tx, rx) = tokio::sync::mpsc::channel(12);
+
+        let server = self.server.clone();
+
+        tokio::spawn(async move {
+            loop {
+                let adapters = server.read().await.adapters.clone();
+
+                let adapter_data = adapters
+                    .iter()
+                    .map(|adapter| {
+                        let adapter = adapter.try_lock().unwrap();
+                        return Adapter {
+                            name:adapter.get_name().to_string(),
+                            live: adapter.get_live(),
+                            description: adapter.get_description().to_string(),
+                            stats:
+                                adapter.get_stats().iter().map(|(key, value)| format!("{}: {}", key, value)).collect()
+                        }
+
+                    })
+                    .collect();
+
+                let response = pubsub_admin::AdapterResponse {
+                    adapters: adapter_data,
+                };
+                match tx.send(Ok(response)).await {
+                    Ok(_) => {
+                        // item (server response) was queued to be send to client
+                    }
+                    Err(_item) => {
+                        // output_stream was build from rx and both are dropped
+                        break;
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(250)).await;
             }
         });
 

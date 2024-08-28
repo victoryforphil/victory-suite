@@ -84,6 +84,8 @@ pub struct TCPServerAdapter {
     clients: TCPClientMapHandle,
     agent: JoinHandle<()>,
     options: TCPServerOptions,
+
+
 }
 
 impl TCPServerAdapter {
@@ -100,6 +102,23 @@ impl TCPServerAdapter {
 }
 
 impl PubSubAdapter for TCPServerAdapter {
+
+    fn get_description(&self) -> String {
+        format!(
+            "tcp://{}:{}",
+            self.options.address, self.options.port
+        )
+    }
+
+    fn get_stats(&self) -> HashMap<String, String> {
+        let clients = self.clients.try_read().unwrap();
+        let n_clients = clients.len();
+        let mut stats = HashMap::new();
+        stats.insert("n_clients".to_string(), n_clients.to_string());
+        stats
+    }
+
+
     fn write(&mut self, to_send: HashMap<PubSubClientIDType, Vec<PubSubMessage>>) {
         let clients = self.clients.clone();
 
@@ -166,9 +185,9 @@ impl PubSubAdapter for TCPServerAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
-    
+
+
+
 
     #[tokio::test]
     async fn test_tcp_server() {

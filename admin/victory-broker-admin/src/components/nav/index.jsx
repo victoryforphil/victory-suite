@@ -31,15 +31,17 @@ import classes from "./nav.module.css";
 
 import { PubSubAdminServiceClient } from "admin-grpc-gen/Pubsub_adminServiceClientPb";
 import * as AdminPB from "admin-grpc-gen/pubsub_admin_pb";
+import { useNavigate } from "react-router-dom";
 const data = [
-  { link: "", label: "Adapters", icon: IconNetwork },
-  { link: "", label: "Channels", icon: IconBellRinging },
+  { link : "/adapters", label: "Adapters", icon: IconNetwork },
+  { link: "/channels", label: "Channels", icon: IconBellRinging },
   { link: "", label: "Data", icon: IconDatabase },
 ];
 
 export function NavbarSimple({ onConnect, states }) {
   const [active, setActive] = useState("Billing");
   const [url, setUrl] = useState("http://localhost:5050");
+
 
   const links = data.map((item) => (
     <a
@@ -48,8 +50,10 @@ export function NavbarSimple({ onConnect, states }) {
       href={item.link}
       key={item.label}
       onClick={(event) => {
-        event.preventDefault();
+      //  event.preventDefault();
         setActive(item.label);
+
+
       }}
     >
       <item.icon className={classes.linkIcon} stroke={1.5} />
