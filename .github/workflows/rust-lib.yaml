@@ -23,7 +23,15 @@ jobs:
       - name: Build
         run: cargo build --verbose
       - name: Run tests
-        run: cargo nextest run --verbose
+        run: cargo nextest run --verbose --profile ci
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()    # run this step even if previous step failed
+        with:
+          name: JEST Tests            # Name of the check run which will be created
+          path: target/nextest/ci/junit.xml
+          reporter: java-junit       # Format of test results
+
   coverage:
     runs-on: ubuntu-latest
     defaults:
