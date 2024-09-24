@@ -5,12 +5,11 @@ pub use timecode::*;
 pub use timecode::*;
 pub use timepoint::*;
 
-
 #[cfg(test)]
-mod integration_tests{
+mod tests_integration {
     use super::*;
     #[test]
-    fn test_measure_time(){
+    fn test_measure_time() {
         let start = Timepoint::now();
         std::thread::sleep(std::time::Duration::from_secs(1));
         let end = Timepoint::now();
