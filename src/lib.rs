@@ -1,13 +1,6 @@
-pub fn test_template_function() {
-    println!("Hello from victory-template!");
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_test_template_function() {
-        test_template_function();
-    }
-}
+pub mod buckets;
+pub mod database;
+pub mod datapoints;
+pub mod primitives;
+pub mod time;
+pub mod topics;
