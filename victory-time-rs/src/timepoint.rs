@@ -78,10 +78,7 @@ impl Add<Timespan> for Timepoint {
 
     fn add(self, rhs: Timespan) -> Self::Output {
         let duration_time = rhs.time;
-        let new_time = Timecode {
-            secs: self.time.secs + duration_time.secs,
-            nanos: self.time.nanos + duration_time.nanos,
-        };
+        let new_time = self.time + duration_time;
         Timepoint::new(new_time)
     }
 }
