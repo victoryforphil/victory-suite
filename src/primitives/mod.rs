@@ -1,9 +1,7 @@
 use blob::VicBlob;
+use victory_time_rs::{Timepoint, Timespan};
 
-use crate::{
-    time::{VicDuration, VicInstant},
-    topics::TopicIDType,
-};
+use crate::topics::TopicIDType;
 
 pub mod blob;
 pub mod integer;
@@ -11,8 +9,8 @@ pub mod string;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Primitives {
-    Instant(VicInstant),
-    Duration(VicDuration),
+    Instant(Timepoint),
+    Duration(Timespan),
     Integer(i64),
     Float(f64),
     Text(String),

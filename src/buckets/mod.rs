@@ -4,18 +4,18 @@ use std::{
 };
 
 use log::{debug, trace};
+use victory_time_rs::Timepoint;
 
 use crate::{
     datapoints::Datapoint,
     primitives::Primitives,
-    time::VicInstantHandle,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
 #[derive(Debug)]
 /// A bucket is a collection of datapoints for a specific topic
 pub struct Bucket {
     pub topic: TopicKeyHandle,
-    pub values: BTreeMap<VicInstantHandle, Datapoint>,
+    pub values: BTreeMap<Timepoint, Datapoint>,
 }
 
 pub type BucketHandle = Arc<RwLock<Bucket>>;
@@ -29,7 +29,7 @@ impl Bucket {
         }))
     }
 
-    pub fn add_primitive(&mut self, time: VicInstantHandle, value: Primitives) {
+    pub fn add_primitive(&mut self, time: Timepoint, value: Primitives) {
         let data_point = Datapoint {
             topic: self.topic.clone(),
             time: time.clone(),
@@ -60,21 +60,21 @@ impl Bucket {
         self.get_latest_datapoint().map(|d| &d.value)
     }
 
-    pub fn get_values_after(&self, time: &VicInstantHandle) -> Vec<&Primitives> {
+    pub fn get_values_after(&self, time: &Timepoint) -> Vec<&Primitives> {
         self.get_data_points_after(time)
             .iter()
             .map(|v| &v.value)
             .collect()
     }
 
-    pub fn get_values_before(&self, time: &VicInstantHandle) -> Vec<&Primitives> {
+    pub fn get_values_before(&self, time: &Timepoint) -> Vec<&Primitives> {
         self.get_data_points_before(time)
             .iter()
             .map(|v| &v.value)
             .collect()
     }
 
-    pub fn get_updated_value(&self, time: &VicInstantHandle) -> Option<&Primitives> {
+    pub fn get_updated_value(&self, time: &Timepoint) -> Option<&Primitives> {
         // Get the nearest value before the time
         let before = self
             .values
@@ -84,17 +84,17 @@ impl Bucket {
         before.or_else(|| self.get_latest_value())
     }
 
-    pub fn get_updated_datapoint(&self, time: &VicInstantHandle) -> Option<&Datapoint> {
+    pub fn get_updated_datapoint(&self, time: &Timepoint) -> Option<&Datapoint> {
         // Get the nearest value before the time
         let before = self.values.range(..time.clone()).last().map(|(_, v)| v);
         before.or_else(|| self.get_latest_datapoint())
     }
 
-    pub fn get_data_points_after(&self, time: &VicInstantHandle) -> Vec<&Datapoint> {
+    pub fn get_data_points_after(&self, time: &Timepoint) -> Vec<&Datapoint> {
         self.values.range(time.clone()..).map(|(_, v)| v).collect()
     }
 
-    pub fn get_data_points_before(&self, time: &VicInstantHandle) -> Vec<&Datapoint> {
+    pub fn get_data_points_before(&self, time: &Timepoint) -> Vec<&Datapoint> {
         self.values.range(..time.clone()).map(|(_, v)| v).collect()
     }
 }
@@ -102,11 +102,12 @@ impl Bucket {
 #[cfg(test)]
 mod tests {
 
+    use victory_time_rs::{Timecode, Timepoint};
+
     use crate::{
         buckets::Bucket,
         datapoints::Datapoint,
         primitives::Primitives,
-        time::{VicInstant, VicTimecode},
         topics::{TopicKey, TopicKeyProvider},
     };
 
@@ -123,7 +124,7 @@ mod tests {
         let topic = TopicKey::from_str("test/topic");
         let bucket = Bucket::new(&topic);
 
-        let time = VicInstant::new(VicTimecode::new_secs(1.0)).handle();
+        let time = Timepoint::new(Timecode::new_secs(1.0));
 
         let test_data = Primitives::Text("Test String value".to_string());
 
@@ -148,7 +149,7 @@ mod tests {
         let topic = TopicKey::from_str("test/topic");
         let bucket = Bucket::new(&topic);
 
-        let time = VicInstant::new(VicTimecode::new_secs(1.0)).handle();
+        let time = Timepoint::new(Timecode::new_secs(1.0));
 
         let test_data = Primitives::Text("Test String value".to_string());
 
