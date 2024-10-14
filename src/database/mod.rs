@@ -2,11 +2,11 @@ use crate::{
     buckets::{Bucket, BucketHandle},
     datapoints::Datapoint,
     primitives::Primitives,
-    time::VicInstant,
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
+use victory_time_rs::Timepoint;
 #[derive(Debug, Clone)]
 pub struct Datastore {
     buckets: BTreeMap<TopicKeyHandle, BucketHandle>,
@@ -46,12 +46,11 @@ impl Datastore {
     pub fn add_primitive<T: TopicKeyProvider>(
         &mut self,
         topic: &T,
-        time: VicInstant,
+        time: Timepoint,
         value: Primitives,
     ) {
         let topic = topic.handle();
-        let time = time.handle();
-
+        let time = time.clone();
         if !self.buckets.contains_key(&topic) {
             let bucket = Bucket::new(&topic);
             self.buckets.insert(topic.clone(), bucket);
@@ -92,12 +91,12 @@ impl Datastore {
     pub fn get_updated_keys<T: TopicKeyProvider>(
         &self,
         topic: &T,
-        time: &VicInstant,
+        time: &Timepoint,
     ) -> Result<Vec<TopicKeyHandle>, DatastoreError> {
         let topic = topic.handle();
         let bucket = self.get_bucket(&topic)?;
         let bucket = bucket.read().unwrap();
-        let new_values = bucket.get_data_points_after(&time.handle());
+        let new_values = bucket.get_data_points_after(&time);
         Ok(new_values.iter().map(|v| v.topic.handle()).collect())
     }
 }
@@ -140,7 +139,7 @@ mod tests {
     pub fn test_datastore_add_primitive() {
         let mut datastore = Datastore::new();
         let topic: TopicKey = "test/topic".into();
-        let time = VicInstant::now();
+        let time = Timepoint::now();
         datastore.add_primitive(&topic, time.clone(), 42.into());
 
         let bucket = datastore.get_bucket(&topic).unwrap();
