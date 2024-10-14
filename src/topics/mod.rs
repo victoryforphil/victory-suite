@@ -4,10 +4,11 @@ use std::{
 };
 
 use log::debug;
+use serde::{Deserialize, Serialize};
 
 pub type TopicIDType = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TopicKeySection {
     pub id: TopicIDType,
     pub display_name: String,
@@ -30,7 +31,7 @@ impl TopicKeySection {
         TopicKeySection { id, display_name }
     }
 }
-#[derive(Clone, Eq)]
+#[derive(Clone, Eq, Serialize, Deserialize)]
 pub struct TopicKey {
     sections: Vec<TopicKeySection>,
 }

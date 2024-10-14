@@ -24,6 +24,72 @@ impl From<i32> for Primitives {
     }
 }
 
+// I8
+impl From<i8> for Primitives {
+    fn from(value: i8) -> Self {
+        Primitives::Integer(value as i64)
+    }
+}
+
+impl From<Primitives> for i8 {
+    fn from(value: Primitives) -> Self {
+        match value {
+            Primitives::Integer(v) => v as i8,
+            _ => panic!("Cannot convert {:?} to i8", value),
+        }
+    }
+}
+
+// i16
+impl From<i16> for Primitives {
+    fn from(value: i16) -> Self {
+        Primitives::Integer(value as i64)
+    }
+}
+
+impl From<Primitives> for i16 {
+    fn from(value: Primitives) -> Self {
+        match value {
+            Primitives::Integer(v) => v as i16,
+            _ => panic!("Cannot convert {:?} to i16", value),
+        }
+    }
+}
+
+// u8
+impl From<u8> for Primitives {
+    fn from(value: u8) -> Self {
+        Primitives::Integer(value as i64)
+    }
+}
+
+impl From<Primitives> for u8 {
+    fn from(value: Primitives) -> Self {
+        match value {
+            Primitives::Integer(v) => v as u8,
+            _ => panic!("Cannot convert {:?} to u8", value),
+        }
+    }
+}
+
+
+// u16
+
+impl From<u16> for Primitives {
+    fn from(value: u16) -> Self {
+        Primitives::Integer(value as i64)
+    }
+}
+
+impl From<Primitives> for u16 {
+    fn from(value: Primitives) -> Self {
+        match value {
+            Primitives::Integer(v) => v as u16,
+            _ => panic!("Cannot convert {:?} to u16", value),
+        }
+    }
+}
+
 impl From<Primitives> for u64 {
     fn from(value: Primitives) -> Self {
         match value {
