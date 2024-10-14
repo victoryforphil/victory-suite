@@ -27,13 +27,16 @@ impl TopicKeySection {
 
     pub fn new_generate(display_name: String) -> TopicKeySection {
         let id = display_name.to_ascii_lowercase();
+        let mut hasher = DefaultHasher::new();
+        display_name.hash(&mut hasher);
+        //let id = hasher.finish().to_string();
         debug!("Generated ID {} for display name {}", id, display_name);
         TopicKeySection { id, display_name }
     }
 }
 #[derive(Clone, Eq, Serialize, Deserialize)]
 pub struct TopicKey {
-    sections: Vec<TopicKeySection>,
+    pub sections: Vec<TopicKeySection>,
 }
 
 // Implement string formatting / printing (dispaly name)
@@ -97,11 +100,12 @@ impl TopicKeyProvider for TopicKey {
 
 impl TopicKey {
     pub fn from_str(display_name: &str) -> TopicKey {
-        let sections = display_name
+        let sections: Vec<TopicKeySection> = display_name
             .split("/")
             .map(|s| TopicKeySection::new_generate(s.to_string()))
+            //Filter out empty strings
+            .filter(|s| !s.id.is_empty())
             .collect();
-
         TopicKey { sections }
     }
 
@@ -123,6 +127,52 @@ impl TopicKey {
             .map(|s| s.id.clone())
             .collect::<Vec<String>>()
             .join("/")
+    }
+    pub fn add_prefix(&self, prefix: TopicKey) -> TopicKey {
+        let mut sections = prefix.sections.clone();
+        sections.extend(self.sections.clone());
+        TopicKey::from_existing(sections)
+    }
+
+    pub fn remove_prefix(&self, prefix: TopicKey) -> Option<TopicKey> {
+        if !self.is_child_of(&prefix) {
+            return None;
+        }
+
+        let sections = self.sections[prefix.sections.len()..].to_vec();
+        Some(TopicKey::from_existing(sections))
+    }
+    pub fn add_suffix(&self, suffix: TopicKey) -> TopicKey {
+        let mut sections = self.sections.clone();
+        sections.extend(suffix.sections.clone());
+        TopicKey::from_existing(sections)
+    }
+
+    pub fn remove_suffix(&self, suffix: TopicKey) -> Option<TopicKey> {
+        if !self.is_parent_of(&suffix) {
+            return None;
+        }
+
+        let sections = self.sections[..self.sections.len() - suffix.sections.len()].to_vec();
+        Some(TopicKey::from_existing(sections))
+    }
+
+    pub fn is_child_of(&self, parent: &TopicKey) -> bool {
+        if self.sections.len() <= parent.sections.len() {
+            return false;
+        }
+
+        for i in 0..parent.sections.len() {
+            if self.sections[i] != parent.sections[i] {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    pub fn is_parent_of(&self, child: &TopicKey) -> bool {
+        child.is_child_of(self)
     }
 
     pub fn id(&self) -> TopicIDType {
@@ -163,5 +213,24 @@ mod tests {
         assert_eq!(key.sections[0].display_name, "test");
         assert_eq!(key.sections[1].display_name, "test");
         assert_eq!(key.sections[0].id, key.sections[1].id);
+    }
+    #[test]
+    fn test_topic_key_display() {
+        let key = TopicKey::from_str("test/test");
+        assert_eq!(key.display_name(), "test/test");
+    }
+    #[test]
+    fn test_topic_prefix() {
+        let key = TopicKey::from_str("test/test");
+        let prefix = TopicKey::from_str("prefix/key");
+        let prefixed = key.add_prefix(prefix);
+        assert_eq!(prefixed.display_name(), "prefix/key/test/test");
+    }
+    #[test]
+    fn test_topic_suffix() {
+        let key = TopicKey::from_str("test/test");
+        let suffix = TopicKey::from_str("suffix/key");
+        let suffixed = key.add_suffix(suffix);
+        assert_eq!(suffixed.display_name(), "test/test/suffix/key");
     }
 }
