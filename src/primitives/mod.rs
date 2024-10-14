@@ -1,15 +1,15 @@
-use blob::VicBlob;
 use ::serde::{Deserialize, Serialize};
+use blob::VicBlob;
 use victory_time_rs::{Timepoint, Timespan};
 
 use crate::topics::TopicIDType;
 
 pub mod blob;
+pub mod bool;
+pub mod float;
 pub mod integer;
-pub mod float;  
-pub mod bool; 
-pub mod string;
 pub mod serde;
+pub mod string;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum Primitives {

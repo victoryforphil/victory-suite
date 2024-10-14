@@ -18,7 +18,6 @@ impl VicBlob {
         }
     }
 
-
     pub fn new_from_data(data: Vec<u8>) -> VicBlob {
         let length = data.len() as u64;
         let data_type = String::from("raw_bytes");

@@ -72,7 +72,6 @@ impl From<Primitives> for u8 {
     }
 }
 
-
 // u16
 
 impl From<u16> for Primitives {
