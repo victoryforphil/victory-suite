@@ -1,12 +1,18 @@
 use crate::{
     buckets::{Bucket, BucketHandle},
     datapoints::Datapoint,
-    primitives::Primitives,
+    primitives::{
+        serde::{deserializer::PrimitiveDeserializer, serialize::to_map},
+        Primitives,
+    },
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 use victory_time_rs::Timepoint;
+pub trait DeserializeOwned: for<'de> Deserialize<'de> {}
+
 #[derive(Debug, Clone)]
 pub struct Datastore {
     buckets: BTreeMap<TopicKeyHandle, BucketHandle>,
@@ -43,6 +49,84 @@ impl Datastore {
             .ok_or_else(|| DatastoreError::BucketNotFound(topic.key().clone()))
     }
 
+    pub fn get_buckets_matching<T: TopicKeyProvider>(
+        &self,
+        parent_topic: &T,
+    ) -> Result<Vec<BucketHandle>, DatastoreError> {
+        Ok(self
+            .buckets
+            .iter()
+            .filter_map(|(k, v)| {
+                if k.key().is_child_of(parent_topic.key()) {
+                    Some(v.clone())
+                } else if k.key() == parent_topic.key() {
+                    Some(v.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<BucketHandle>>())
+    }
+
+    pub fn get_struct<T, S>(&self, topic: &T) -> Result<S, DatastoreError>
+    where
+        T: TopicKeyProvider,
+        S: Clone + for<'de> Deserialize<'de>,
+    {
+        // Get all the buckets that match the topic
+        let buckets = self.get_buckets_matching(topic)?;
+
+        let mut value_map: BTreeMap<String, Primitives> = BTreeMap::new();
+        for bucket in buckets {
+            let bucket = bucket.read().unwrap();
+
+            if let Some(value) = bucket.get_latest_value() {
+                let bucket_topic = bucket.topic.key().display_name();
+                let parent_topic = topic.key().display_name() + "/";
+
+                // Add a trailing/
+                let key = format!("{}/", bucket_topic.replace(&parent_topic, ""));
+                value_map.insert(key.to_string(), value.clone());
+            }
+        }
+        // Deserialize the value map into the struct
+        let mut deserializer = PrimitiveDeserializer::new(&value_map);
+        let result = match Deserialize::deserialize(&mut deserializer) {
+            Ok(s) => Ok(s),
+            Err(e) => Err(DatastoreError::Generic(format!(
+                "Error deserializing struct: {:?}",
+                e
+            ))),
+        };
+
+        match result {
+            Ok(s) => Ok(s),
+            Err(e) => Err(DatastoreError::Generic(format!(
+                "Error deserializing struct: {:?}",
+                e
+            ))),
+        }
+    }
+
+    pub fn add_struct<T: TopicKeyProvider, S: Serialize>(
+        &mut self,
+        topic: &T,
+        time: Timepoint,
+        value: S,
+    ) -> Result<(), DatastoreError> {
+        let topic = topic.handle();
+        let value_map = to_map(&value)
+            .map_err(|e| DatastoreError::Generic(format!("Error serializing struct: {:?}", e)))?;
+
+        for (key, value) in value_map {
+            let key = TopicKey::from_str(&key);
+            let full_key = key.add_prefix(topic.key().to_owned());
+            // Remove the leading slash
+            self.add_primitive(&full_key, time.clone(), value);
+        }
+        Ok(())
+    }
+
     pub fn add_primitive<T: TopicKeyProvider>(
         &mut self,
         topic: &T,
@@ -51,6 +135,7 @@ impl Datastore {
     ) {
         let topic = topic.handle();
         let time = time.clone();
+
         if !self.buckets.contains_key(&topic) {
             let bucket = Bucket::new(&topic);
             self.buckets.insert(topic.clone(), bucket);
@@ -83,11 +168,25 @@ impl Datastore {
         topic: &T,
     ) -> Result<Vec<Datapoint>, DatastoreError> {
         let topic = topic.handle();
-        let bucket = self.get_bucket(&topic)?;
-        let bucket = bucket.read().unwrap();
-        Ok(bucket.get_datapoints())
+        let buckets = self.get_buckets_matching(&topic)?;
+        let mut datapoints = Vec::new();
+        for bucket in buckets {
+            let bucket = bucket.read().unwrap();
+            datapoints.extend(bucket.get_datapoints());
+        }
+
+        Ok(datapoints)
+    }
+    pub fn get_all_keys(&self) -> Vec<TopicKeyHandle> {
+        self.buckets.keys().cloned().collect()
     }
 
+    pub fn get_all_display_names(&self) -> BTreeSet<String> {
+        self.buckets
+            .keys()
+            .map(|k| k.key().display_name())
+            .collect()
+    }
     pub fn get_updated_keys<T: TopicKeyProvider>(
         &self,
         topic: &T,
@@ -96,7 +195,7 @@ impl Datastore {
         let topic = topic.handle();
         let bucket = self.get_bucket(&topic)?;
         let bucket = bucket.read().unwrap();
-        let new_values = bucket.get_data_points_after(&time);
+        let new_values = bucket.get_data_points_after(&time.clone());
         Ok(new_values.iter().map(|v| v.topic.handle()).collect())
     }
 }
@@ -136,6 +235,51 @@ mod tests {
     }
 
     #[test]
+    pub fn test_datastore_get_buckets_matching() {
+        let mut datastore = Datastore::new();
+
+        let topic_parent = TopicKey::from_str("test/topic");
+        let topic_child_a = TopicKey::from_str("test/topic/b");
+        let topic_child_b = TopicKey::from_str("test/topic/a");
+        let topic_other = TopicKey::from_str("other/topic");
+        let topic_other2 = TopicKey::from_str("test/other");
+        let topic_child_a1 = TopicKey::from_str("test/topic/a/1");
+
+        datastore.create_bucket(&topic_parent);
+        datastore.create_bucket(&topic_child_a);
+        datastore.create_bucket(&topic_child_b);
+        datastore.create_bucket(&topic_other);
+        datastore.create_bucket(&topic_other2);
+        datastore.create_bucket(&topic_child_a1);
+
+        let buckets = datastore.get_buckets_matching(&topic_parent).unwrap();
+        assert_eq!(buckets.len(), 4);
+        for bucket in &buckets {
+            let bucket = bucket.read().unwrap();
+            if bucket.topic.key() == &topic_parent {
+                continue;
+            }
+            assert!(
+                bucket.topic.is_child_of(&topic_parent),
+                "Bucket {:?} is not a child of {:?}",
+                bucket.topic,
+                topic_parent
+            );
+        }
+
+        let keys = buckets
+            .iter()
+            .map(|b| b.read().unwrap().topic.key().clone())
+            .collect::<Vec<TopicKey>>();
+        assert!(keys.contains(&topic_child_a));
+        assert!(keys.contains(&topic_child_b));
+        assert!(keys.contains(&topic_child_a1));
+        assert!(!keys.contains(&topic_other));
+        assert!(!keys.contains(&topic_other2));
+        assert!(keys.contains(&topic_parent));
+    }
+
+    #[test]
     pub fn test_datastore_add_primitive() {
         let mut datastore = Datastore::new();
         let topic: TopicKey = "test/topic".into();
@@ -148,5 +292,30 @@ mod tests {
         assert_eq!(datapoints.len(), 1);
         assert_eq!(datapoints[0].time, time.clone().into());
         assert_eq!(datapoints[0].value, 42.into());
+    }
+
+    #[test]
+    pub fn test_datastore_get_set_struct() {
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+        struct TestStruct {
+            a: i32,
+            b: String,
+        }
+
+        let mut datastore = Datastore::new();
+        let topic: TopicKey = "/test/topic".into();
+        let time = Timepoint::now();
+        let test_struct = TestStruct {
+            a: 42,
+            b: "test".to_string(),
+        };
+
+        datastore
+            .add_struct(&topic, time.clone(), test_struct.clone())
+            .unwrap();
+        // Log datastore keys
+
+        let result: TestStruct = datastore.get_struct(&topic).unwrap();
+        assert_eq!(result, test_struct);
     }
 }
