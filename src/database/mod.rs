@@ -16,6 +16,61 @@ use victory_time_rs::Timepoint;
 pub struct Datastore {
     buckets: BTreeMap<TopicKeyHandle, BucketHandle>,
 }
+
+pub struct DataView {
+    pub buckets: Vec<BucketHandle>,
+}
+
+impl DataView {
+    pub fn new() -> DataView {
+        DataView {
+            buckets: Vec::new(),
+        }
+    }
+    pub fn add_query(mut self,datastore: &Datastore, query: &TopicKey) -> Result<DataView, DatastoreError> {
+        let buckets = datastore.get_buckets_matching(query)?;
+        self.buckets.extend(buckets);
+        Ok(self)
+    }
+    pub fn get_latest<T: TopicKeyProvider, S: DeserializeOwned>(
+        &self,
+        topic: &T,
+    ) -> Result<S, DatastoreError> {
+        let mut value_map: BTreeMap<String, Primitives> = BTreeMap::new();
+        for bucket in self.buckets.iter() {
+            let bucket = bucket.read().unwrap();
+            if !bucket.topic.key().is_child_of(topic.key()) {
+                continue;
+            }
+
+            if let Some(value) = bucket.get_latest_value() {
+                let bucket_topic = bucket.topic.key().display_name();
+                let parent_topic = topic.key().display_name() + "/";
+
+                // Add a trailing/
+                let key = format!("{}/", bucket_topic.replace(&parent_topic, ""));
+                value_map.insert(key.to_string(), value.clone());
+            }
+        }
+        // Deserialize the value map into the struct
+        let mut deserializer = PrimitiveDeserializer::new(&value_map);
+        let result = match Deserialize::deserialize(&mut deserializer) {
+            Ok(s) => Ok(s),
+            Err(e) => Err(DatastoreError::Generic(format!(
+                "Error deserializing struct: {:?}",
+                e
+            ))),
+        };
+
+        match result {
+            Ok(s) => Ok(s),
+            Err(e) => Err(DatastoreError::Generic(format!(
+                "Error deserializing struct: {:?}",
+                e
+            ))),
+        }
+    }
+}
 #[derive(Error, Debug)]
 pub enum DatastoreError {
     #[error("Generic Datastore Error: {0}")]
@@ -316,5 +371,47 @@ mod tests {
 
         let result: TestStruct = datastore.get_struct(&topic).unwrap();
         assert_eq!(result, test_struct);
+    }
+
+    #[test]
+    pub fn test_datastore_view() {
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+        struct TestStructA {
+            a: i32,
+            b: String,
+        }
+
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+        struct TestStructB {
+            c: i32,
+            d: String,
+        }
+
+        let mut datastore = Datastore::new();
+        let topic_a: TopicKey = "/test/a".into();
+        let topic_b: TopicKey = "/test/b".into();
+        let time = Timepoint::now();
+        let test_struct_a = TestStructA {
+            a: 42,
+            b: "test".to_string(),
+        };
+        let test_struct_b = TestStructB {
+            c: 42,
+            d: "test".to_string(),
+        };
+        datastore
+            .add_struct(&topic_a, time.clone(), test_struct_a.clone())
+            .unwrap();
+        datastore
+            .add_struct(&topic_b, time.clone(), test_struct_b.clone())
+            .unwrap();
+
+        let view = DataView::new().add_query(&datastore, &topic_a).unwrap().add_query(&datastore, &topic_b).unwrap();
+
+        let result: TestStructA = view.get_latest(&topic_a).unwrap();
+        assert_eq!(result, test_struct_a);
+
+        let result: TestStructB = view.get_latest(&topic_b).unwrap();
+        assert_eq!(result, test_struct_b);
     }
 }
