@@ -7,11 +7,10 @@ use crate::{
     },
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 use victory_time_rs::Timepoint;
-pub trait DeserializeOwned: for<'de> Deserialize<'de> {}
 
 #[derive(Debug, Clone)]
 pub struct Datastore {
@@ -71,7 +70,7 @@ impl Datastore {
     pub fn get_struct<T, S>(&self, topic: &T) -> Result<S, DatastoreError>
     where
         T: TopicKeyProvider,
-        S: Clone + for<'de> Deserialize<'de>,
+        S: DeserializeOwned,
     {
         // Get all the buckets that match the topic
         let buckets = self.get_buckets_matching(topic)?;
