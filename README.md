@@ -1,2 +1,2 @@
-# victory-template
+# victory-commander
 Base for victory rust projects.
