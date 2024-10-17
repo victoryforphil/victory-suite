@@ -4,6 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use log::info;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use strum_macros::EnumIter;
 use victory_data_store::database::{DataView, Datastore};
@@ -39,9 +40,10 @@ impl BasherSysRunner {
         self.current_time = Timepoint::zero();
 
         for system in self.systems.iter_mut() {
+            log::info!("Initializing system: {:?}", system.lock().unwrap().name());
             system.lock().unwrap().init();
         }
-
+        info!("Running main loop for {:?}s", self.end_time.secs());
         while self.current_time < self.end_time {
             for system in self.systems.iter_mut() {
                 let mut system = system.lock().unwrap();
@@ -55,5 +57,6 @@ impl BasherSysRunner {
             }
             self.current_time = self.current_time.clone() + self.dt.clone();
         }
+        info!("Finished running main loop");
     }
 }
