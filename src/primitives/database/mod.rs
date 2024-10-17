@@ -54,6 +54,7 @@ impl Datastore {
         if !self.buckets.contains_key(&topic) {
             let bucket = Bucket::new(&topic);
             self.buckets.insert(topic.clone(), bucket);
+            trace!("Created bucket for topic: {:?}", topic);
         }
 
         let bucket = self.buckets.get_mut(&topic).unwrap();

@@ -7,6 +7,7 @@ use crate::{
     },
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
+use log::trace;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
@@ -16,53 +17,64 @@ use victory_time_rs::Timepoint;
 pub struct Datastore {
     buckets: BTreeMap<TopicKeyHandle, BucketHandle>,
 }
-
+#[derive(Debug, Clone)]
 pub struct DataView {
-    pub buckets: Vec<BucketHandle>,
+    pub maps: BTreeMap<TopicKey, Primitives>,
 }
 
 impl DataView {
     pub fn new() -> DataView {
         DataView {
-            buckets: Vec::new(),
+            maps: BTreeMap::new(),
         }
     }
     pub fn add_query(
         mut self,
         datastore: &Datastore,
-        query: &TopicKey,
+        topic: &TopicKey,
     ) -> Result<DataView, DatastoreError> {
-        let buckets = datastore.get_buckets_matching(query)?;
-        self.buckets.extend(buckets);
+     
+        let buckets = datastore.get_buckets_matching(topic)?;
+        for bucket in buckets {
+            let bucket = bucket.read().unwrap();
+
+            if let Some(value) = bucket.get_latest_datapoint() {
+                let key = value.topic.key().clone();
+                self.maps.insert(key, value.value.clone());
+            }
+        }
+
         Ok(self)
     }
     pub fn get_latest_map<T: TopicKeyProvider>(
         &self,
         topic: &T,
-    ) -> Result<BTreeMap<String, Primitives>, DatastoreError> {
-        let mut value_map: BTreeMap<String, Primitives> = BTreeMap::new();
-        for bucket in self.buckets.iter() {
-            let bucket = bucket.read().unwrap();
-            if !bucket.topic.key().is_child_of(topic.key()) {
-                continue;
-            }
-
-            if let Some(value) = bucket.get_latest_value() {
-                let bucket_topic = bucket.topic.key().display_name();
-                let parent_topic = topic.key().display_name() + "/";
-
-                // Add a trailing/
-                let key = format!("{}/", bucket_topic.replace(&parent_topic, ""));
-                value_map.insert(key.to_string(), value.clone());
-            }
-        }
-        Ok(value_map)
+    ) -> Result<BTreeMap<TopicKey, Primitives>, DatastoreError> {
+        
+        let map = self.maps.iter()
+            .filter_map(|(k, v)| {
+                if k.key().is_child_of(topic.key()) {
+                    Some((k.key().clone(), v.clone()))
+                } else if k.key() == topic.key() {
+                    Some((k.key().clone(), v.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect::<BTreeMap<TopicKey, Primitives>>();
+        Ok(map)
     }
     pub fn get_latest<T: TopicKeyProvider, S: DeserializeOwned>(
         &self,
         topic: &T,
     ) -> Result<S, DatastoreError> {
+
+
+
         let value_map = self.get_latest_map(topic)?;
+        // Remove topic from the value map
+        let value_map = value_map.iter().map(|(k, v)| (k.remove_prefix(topic.key().clone()).unwrap(), v.clone())).collect();
+        println!("Value map: {:?} for topic: {:?}", value_map, topic.key());
         // Deserialize the value map into the struct
         let mut deserializer = PrimitiveDeserializer::new(&value_map);
         let result = S::deserialize(&mut deserializer)
@@ -93,10 +105,8 @@ impl Datastore {
     }
 
     pub fn apply_view(&mut self, view: DataView) -> Result<(), DatastoreError> {
-        for bucket in view.buckets {
-            let bucket_read = bucket.read().unwrap();
-            self.buckets
-                .insert(bucket_read.topic.handle().clone(), bucket.clone());
+        for (key, value) in view.maps {
+            self.add_primitive(&key, Timepoint::now(), value);
         }
         Ok(())
     }
@@ -127,8 +137,10 @@ impl Datastore {
             .iter()
             .filter_map(|(k, v)| {
                 if k.key().is_child_of(parent_topic.key()) {
+                    trace!("Bucket {:?} matches topic {:?}", v, parent_topic.key());
                     Some(v.clone())
                 } else if k.key() == parent_topic.key() {
+                    trace!("Bucket {:?} matches topic {:?}", v, parent_topic.key());
                     Some(v.clone())
                 } else {
                     None
@@ -145,17 +157,15 @@ impl Datastore {
         // Get all the buckets that match the topic
         let buckets = self.get_buckets_matching(topic)?;
 
-        let mut value_map: BTreeMap<String, Primitives> = BTreeMap::new();
+        let mut value_map: BTreeMap<TopicKey, Primitives> = BTreeMap::new();
         for bucket in buckets {
             let bucket = bucket.read().unwrap();
 
-            if let Some(value) = bucket.get_latest_value() {
-                let bucket_topic = bucket.topic.key().display_name();
-                let parent_topic = topic.key().display_name() + "/";
-
-                // Add a trailing/
-                let key = format!("{}/", bucket_topic.replace(&parent_topic, ""));
-                value_map.insert(key.to_string(), value.clone());
+            if let Some(value) = bucket.get_latest_datapoint() {
+                let mut key = value.topic.key().remove_prefix(topic.key().clone()).unwrap();
+                trace!("Added value to view: {:?} -> {:?}", key, value.value);
+                value_map.insert(key, value.value.clone());
+          
             }
         }
         // Deserialize the value map into the struct
@@ -187,8 +197,9 @@ impl Datastore {
         let value_map = to_map(&value)
             .map_err(|e| DatastoreError::Generic(format!("Error serializing struct: {:?}", e)))?;
 
+        trace!("[add_struct] Value map: {:#?}", value_map);
+
         for (key, value) in value_map {
-            let key = TopicKey::from_str(&key);
             let full_key = key.add_prefix(topic.key().to_owned());
             // Remove the leading slash
             self.add_primitive(&full_key, time.clone(), value);
@@ -271,6 +282,8 @@ impl Datastore {
 
 #[cfg(test)]
 mod tests {
+    use log::debug;
+
     use crate::database::*;
 
     #[test]
@@ -365,6 +378,7 @@ mod tests {
 
     #[test]
     pub fn test_datastore_get_set_struct() {
+        sensible_env_logger::safe_init!();
         #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
         struct TestStruct {
             a: i32,
@@ -382,6 +396,8 @@ mod tests {
         datastore
             .add_struct(&topic, time.clone(), test_struct.clone())
             .unwrap();
+
+        debug!("Datastore keys after add:\n {:#?}", datastore.get_all_keys());
         // Log datastore keys
 
         let result: TestStruct = datastore.get_struct(&topic).unwrap();
@@ -390,6 +406,7 @@ mod tests {
 
     #[test]
     pub fn test_datastore_view() {
+        sensible_env_logger::safe_init!();
         #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
         struct TestStructA {
             a: i32,
@@ -426,8 +443,11 @@ mod tests {
             .unwrap()
             .add_query(&datastore, &topic_b)
             .unwrap();
+        println!("[test_datastore_view] Input view: {:?}", view);
+
 
         let result: TestStructA = view.get_latest(&topic_a).unwrap();
+       
         assert_eq!(result, test_struct_a);
 
         let result: TestStructB = view.get_latest(&topic_b).unwrap();
