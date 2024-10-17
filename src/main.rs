@@ -1,25 +1,34 @@
+use std::sync::{Arc, Mutex};
+
 use enum_dispatch::enum_dispatch;
 use log::info;
 use strum_macros::EnumIter;
-use system::{mock_system::MockSystem, runner::BasherSysRunner};
+use system::runner::BasherSysRunner;
+use test_systems::time_scale::{TimeScaleData, TimeScaleSystem};
+use victory_data_store::topics::{TopicKey, TopicKeyProvider};
 use victory_time_rs::Timepoint;
 mod system;
-mod mock_system;
-#[enum_dispatch(System)]
-#[derive(EnumIter)]
-enum MySystems{
-    MockSystem 
-}
+mod test_systems;
 
 pub fn main() {
     pretty_env_logger::init();
     info!("Hello from victory-commander!");
+    let key = TopicKey::from_str("time_data");
+    let mut runner = BasherSysRunner::new();
+    runner.data_store.add_struct(
+        &key.clone(),
+        Timepoint::now(),
+        TimeScaleData { test_value: 10.0 },
+    );
 
-    let mut runner = BasherSysRunner::<MySystems>::new();
-    runner.run(Timepoint::new_secs(10.0));
-    info!("Finished");
-    let keys = runner.data_store.get_keys();
-    info!("Keys: {:?}", keys);
+    let time_system = TimeScaleSystem::new("time_data");
+    runner.add_system(Arc::new(Mutex::new(time_system)));
+
+    runner.run(Timepoint::new_secs(1000.0));
+
+    for key in runner.data_store.get_all_keys() {
+        info!("Key: {:?}", key);
+        let latest = runner.data_store.get_latest_primitive(&key).unwrap();
+        info!("Latest: {:?}", latest);
+    }
 }
-
-
