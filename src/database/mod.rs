@@ -74,7 +74,7 @@ impl DataView {
         let value_map = self.get_latest_map(topic)?;
         // Remove topic from the value map
         let value_map = value_map.iter().map(|(k, v)| (k.remove_prefix(topic.key().clone()).unwrap(), v.clone())).collect();
-        println!("Value map: {:?} for topic: {:?}", value_map, topic.key());
+
         // Deserialize the value map into the struct
         let mut deserializer = PrimitiveDeserializer::new(&value_map);
         let result = S::deserialize(&mut deserializer)
@@ -148,10 +148,10 @@ impl Datastore {
             .iter()
             .filter_map(|(k, v)| {
                 if k.key().is_child_of(parent_topic.key()) {
-                    trace!("Bucket {:?} matches topic {:?}", v, parent_topic.key());
+                   // trace!("Bucket {:?} matches topic {:?}", v, parent_topic.key());
                     Some(v.clone())
                 } else if k.key() == parent_topic.key() {
-                    trace!("Bucket {:?} matches topic {:?}", v, parent_topic.key());
+                   // trace!("Bucket {:?} matches topic {:?}", v, parent_topic.key());
                     Some(v.clone())
                 } else {
                     None
@@ -468,7 +468,7 @@ mod tests {
             .unwrap()
             .add_query(&datastore, &topic_b)
             .unwrap();
-        println!("[test_datastore_view] Input view: {:?}", view);
+     
 
 
         let result: TestStructA = view.get_latest(&topic_a).unwrap();
