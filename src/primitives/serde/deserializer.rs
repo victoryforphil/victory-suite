@@ -23,7 +23,6 @@ impl<'de> PrimitiveDeserializer<'de> {
     fn enter(&mut self, key: &str) {
         self.path.push_str(key);
         self.path.push('/');
-        println!("Entering path: {}", self.path);
     }
 
     fn exit(&mut self) {
@@ -34,8 +33,6 @@ impl<'de> PrimitiveDeserializer<'de> {
         // Remove the last key
         topic.sections.pop();
         self.path = topic.display_name() + "/";
-
-        println!("Exiting path: {}", self.path);
     }
 }
 
