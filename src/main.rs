@@ -1,9 +1,8 @@
-use std::mem;
 
 use log::info;
 
 use serde::{Deserialize, Serialize};
-use victory_data_store::{buckets::BucketHandle, database::Datastore, topics::TopicKey};
+use victory_data_store::{database::Datastore, topics::TopicKey};
 use victory_time_rs::Timepoint;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "uav_state")]
@@ -49,7 +48,7 @@ impl Default for UAVState {
 fn main() {
     env_logger::init();
 
-    let mut uav_state = UAVState::default();
+    let uav_state = UAVState::default();
     let mut data_store = Datastore::new();
 
     let topic = TopicKey::from_str("main");
