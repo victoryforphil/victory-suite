@@ -16,8 +16,14 @@ memuse = "0.2.1"
 
 [dev-dependencies]
 sensible-env-logger = "0.3"
+divan = "0.1.14"
 
 [dependencies.tracy]
 package = "tracy_full"
 version = "1.10.0"
 features = ["enable"]
+
+
+[[bench]]
+name = "serde"
+harness = false

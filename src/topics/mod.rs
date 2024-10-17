@@ -25,10 +25,8 @@ impl TopicKeySection {
     }
 
     pub fn new_generate(display_name: String) -> TopicKeySection {
-        let id = display_name.to_ascii_lowercase();
-        let mut hasher = DefaultHasher::new();
-        display_name.hash(&mut hasher);
-        //let id = hasher.finish().to_string();
+        let mut id: String = display_name.to_ascii_lowercase();
+     
         TopicKeySection { id, display_name }
     }
 }
@@ -114,9 +112,10 @@ impl TopicKey {
     pub fn display_name(&self) -> String {
         self.sections
             .iter()
-            .map(|s| s.display_name.clone())
+            .map(|s| s.display_name.to_string())
             .collect::<Vec<String>>()
             .join("/")
+            
     }
 
     pub fn to_string(&self) -> String {
@@ -127,9 +126,9 @@ impl TopicKey {
             .join("/")
     }
     pub fn add_prefix(&self, prefix: TopicKey) -> TopicKey {
-        let mut sections = prefix.sections.clone();
-        sections.extend(self.sections.clone());
-        TopicKey::from_existing(sections)
+        TopicKey {
+            sections: prefix.sections.into_iter().chain(self.sections.clone()).collect(),
+        }
     }
 
     pub fn remove_prefix(&self, prefix: TopicKey) -> Option<TopicKey> {
@@ -141,9 +140,9 @@ impl TopicKey {
         Some(TopicKey::from_existing(sections))
     }
     pub fn add_suffix(&self, suffix: TopicKey) -> TopicKey {
-        let mut sections = self.sections.clone();
-        sections.extend(suffix.sections.clone());
-        TopicKey::from_existing(sections)
+            let mut sections = self.sections.clone();
+            sections.extend(suffix.sections.clone());
+            TopicKey::from_existing(sections)
     }
 
     pub fn remove_suffix(&self, suffix: TopicKey) -> Option<TopicKey> {

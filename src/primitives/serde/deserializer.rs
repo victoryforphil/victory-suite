@@ -1,15 +1,16 @@
+use log::trace;
 use serde::de::{self, Deserialize, Deserializer, IntoDeserializer, MapAccess, SeqAccess, Visitor};
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::{primitives::Primitives, topics::TopicKey};
+use crate::{primitives::Primitives, topics::{TopicKey, TopicKeyHandle, TopicKeyProvider}};
 
 pub struct PrimitiveDeserializer<'de> {
-    flat_map: &'de BTreeMap<TopicKey, Primitives>,
+    flat_map: &'de BTreeMap<TopicKeyHandle, Primitives>,
     path: TopicKey,
 }
 
 impl<'de> PrimitiveDeserializer<'de> {
-    pub fn new(flat_map: &'de BTreeMap<TopicKey, Primitives>) -> Self {
+    pub fn new(flat_map: &'de BTreeMap<TopicKeyHandle, Primitives>) -> Self {
         PrimitiveDeserializer {
             flat_map,
             path: TopicKey::from_str(""),
@@ -17,14 +18,19 @@ impl<'de> PrimitiveDeserializer<'de> {
     }
 
     fn get_value(&self) -> Option<&Primitives> {
-        self.flat_map.get(&self.path)
+        let value = self.flat_map.get(&self.path);
+        trace!("[get_value] path: {:?}, value: {:?}, keys: {:#?}", self.path, value, self.flat_map.keys());
+        value
     }
 
     fn enter(&mut self, key: &TopicKey) {
+        
         self.path = self.path.add_suffix(key.clone());
+        trace!("[enter] key: {:?}, path: {:?}", key, self.path);
     }
 
     fn exit(&mut self) {
+        trace!("[exit] path: {:?}", self.path);
         self.path.sections.pop();
     }
 }
@@ -62,13 +68,15 @@ impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
         V: Visitor<'de>,
     {
         // Add the struct name to the path
-        self.enter(&TopicKey::from_str(name));
+        trace!("[deserialize_struct] path: {:?}, name: {:?}", self.path, name);
+        
+    
         let res = visitor.visit_map(StructAccess {
             de: self,
             fields: fields.iter().cloned().collect(),
             field_index: 0,
         });
-        self.exit();
+       
         res
     }
 
@@ -92,6 +100,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
     {
         let prefix = self.path.clone();
         let keys = self.collect_map_keys(&prefix);
+        trace!("[deserialize_map] keys: {:?}", keys);
         let map_access = MapAccessImpl {
             de: self,
             keys,
@@ -374,7 +383,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        visitor.visit_str(&self.path.to_string())
+        visitor.visit_str(&self.path.display_name())
     }
 
     fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -468,7 +477,7 @@ impl<'de, 'a> PrimitiveDeserializer<'de> {
         for key in self.flat_map.keys() {
             if key.is_child_of(prefix) {
                 let remainder = &key.remove_prefix(prefix.clone()).unwrap();
-                if let Ok(idx) = remainder.to_string().parse::<usize>() {
+                if let Ok(idx) = remainder.display_name().parse::<usize>() {
                     indices.push(idx);
                 }
             }
@@ -489,6 +498,7 @@ impl<'de, 'a> PrimitiveDeserializer<'de> {
                 keys.insert(remainder.clone());
             }
         }
+        trace!("[collect_map_keys] keys: {:?}", keys);
         keys
     }
 }
@@ -520,7 +530,7 @@ impl<'de, 'a> MapAccess<'de> for StructAccess<'a, 'de> {
     where
         V: de::DeserializeSeed<'de>,
     {
-        let key = self.fields[self.field_index - 1];
+        let key = self.fields[self.field_index - 1 ];
         self.de.enter(&TopicKey::from_str(key));
         let value = seed.deserialize(&mut *self.de)?;
         self.de.exit();
@@ -571,7 +581,7 @@ impl<'de, 'a> MapAccess<'de> for MapAccessImpl<'a, 'de> {
     {
         if let Some(key) = self.keys.iter().skip(self.index).next() {
             self.index += 1;
-            seed.deserialize(key.to_string().into_deserializer()).map(Some)
+            seed.deserialize(key.display_name().into_deserializer()).map(Some)
         } else {
          
             Ok(None)
@@ -623,30 +633,30 @@ mod tests {
         sensible_env_logger::safe_init!();
         let mut flat_map = BTreeMap::new();
         flat_map.insert(
-            TopicKey::from_str("TestComplexStruct"),
+            TopicKey::from_str("/_type").handle(),
             Primitives::StructType("TestComplexStruct".to_string()),
         );
         flat_map.insert(
-            TopicKey::from_str("TestComplexStruct/complex_int"),
+            TopicKey::from_str("/complex_int").handle(),
             Primitives::Integer(42),
         );
         flat_map.insert(
-            TopicKey::from_str("TestComplexStruct/complex_string"),
+            TopicKey::from_str("/complex_string").handle(),
             Primitives::Text("Test String".to_string()),
         );
         flat_map.insert(
-            TopicKey::from_str("TestComplexStruct/simple_struct/TestSimpleStruct"),
+            TopicKey::from_str("/simple_struct/_type").handle(),
             Primitives::StructType("TestSimpleStruct".to_string()),
         );
         flat_map.insert(
-            TopicKey::from_str("TestComplexStruct/simple_struct/TestSimpleStruct/simple_int"),
+            TopicKey::from_str("/simple_struct/simple_int").handle(),
             Primitives::Integer(42),
         );
         flat_map.insert(
-            TopicKey::from_str("TestComplexStruct/simple_struct/TestSimpleStruct/simple_string"),
+            TopicKey::from_str("/simple_struct/simple_string").handle() ,
             Primitives::Text("Test String".to_string()),
         );
-
+        
         let mut deserializer = PrimitiveDeserializer::new(&flat_map);
         let result: TestComplexStruct = Deserialize::deserialize(&mut deserializer).unwrap();
 
