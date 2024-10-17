@@ -88,6 +88,17 @@ impl DataView {
             ))),
         }
     }
+
+    pub fn add_latest<T: TopicKeyProvider, S: Serialize>(&mut self, topic: &T, value: S) -> Result<(), DatastoreError> {
+        let topic_key = topic.key().clone();
+        let value_map = to_map(&value).unwrap();
+        for (key, value) in value_map {
+            let full_key = key.add_prefix(topic_key.clone());
+            self.maps.insert(full_key, value);
+        }
+        Ok(())
+
+    }
 }
 #[derive(Error, Debug)]
 pub enum DatastoreError {
@@ -403,21 +414,35 @@ mod tests {
         let result: TestStruct = datastore.get_struct(&topic).unwrap();
         assert_eq!(result, test_struct);
     }
+    #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+    struct TestStructA {
+        a: i32,
+        b: String,
+    }
 
+    #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+    struct TestStructB {
+        c: i32,
+        d: String,
+    }
+    #[test]
+    pub fn test_dataview_add_latest() {
+        let mut datastore = Datastore::new();
+        let topic: TopicKey = "/test/topic".into();
+     
+        let test_struct = TestStructA {
+            a: 42,
+            b: "test".to_string(),
+        };
+        let mut view = DataView::new();
+        view.add_latest(&topic, test_struct.clone()).unwrap();
+        let result: TestStructA = view.get_latest(&topic).unwrap();
+        assert_eq!(result, test_struct);
+    }
     #[test]
     pub fn test_datastore_view() {
         sensible_env_logger::safe_init!();
-        #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-        struct TestStructA {
-            a: i32,
-            b: String,
-        }
-
-        #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-        struct TestStructB {
-            c: i32,
-            d: String,
-        }
+      
 
         let mut datastore = Datastore::new();
         let topic_a: TopicKey = "/test/a".into();
