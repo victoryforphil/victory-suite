@@ -1,16 +1,10 @@
-use enum_dispatch::enum_dispatch;
-use serde::{de::DeserializeOwned, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeSet,
     sync::{Arc, Mutex},
 };
 use victory_data_store::database::DataView;
-use victory_data_store::{
-    database::Datastore,
-    primitives::{serde::serialize::to_map, Primitives},
-    topics::TopicKey,
-};
-use victory_time_rs::{Timepoint, Timespan};
+use victory_data_store::topics::TopicKey;
+use victory_time_rs::Timespan;
 
 /// Trait that defines a commander system that can be run by the commander.
 /// Will use its inputs to generate a data store query to feed said inputs into the system.
