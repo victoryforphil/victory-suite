@@ -27,15 +27,19 @@ impl DataView {
             buckets: Vec::new(),
         }
     }
-    pub fn add_query(mut self,datastore: &Datastore, query: &TopicKey) -> Result<DataView, DatastoreError> {
+    pub fn add_query(
+        mut self,
+        datastore: &Datastore,
+        query: &TopicKey,
+    ) -> Result<DataView, DatastoreError> {
         let buckets = datastore.get_buckets_matching(query)?;
         self.buckets.extend(buckets);
         Ok(self)
     }
-    pub fn get_latest<T: TopicKeyProvider, S: DeserializeOwned>(
+    pub fn get_latest_map<T: TopicKeyProvider>(
         &self,
         topic: &T,
-    ) -> Result<S, DatastoreError> {
+    ) -> Result<BTreeMap<String, Primitives>, DatastoreError> {
         let mut value_map: BTreeMap<String, Primitives> = BTreeMap::new();
         for bucket in self.buckets.iter() {
             let bucket = bucket.read().unwrap();
@@ -52,15 +56,17 @@ impl DataView {
                 value_map.insert(key.to_string(), value.clone());
             }
         }
+        Ok(value_map)
+    }
+    pub fn get_latest<T: TopicKeyProvider, S: DeserializeOwned>(
+        &self,
+        topic: &T,
+    ) -> Result<S, DatastoreError> {
+        let value_map = self.get_latest_map(topic)?;
         // Deserialize the value map into the struct
         let mut deserializer = PrimitiveDeserializer::new(&value_map);
-        let result = match Deserialize::deserialize(&mut deserializer) {
-            Ok(s) => Ok(s),
-            Err(e) => Err(DatastoreError::Generic(format!(
-                "Error deserializing struct: {:?}",
-                e
-            ))),
-        };
+        let result = S::deserialize(&mut deserializer)
+            .map_err(|e| DatastoreError::Generic(format!("Error deserializing struct: {:?}", e)));
 
         match result {
             Ok(s) => Ok(s),
@@ -84,6 +90,15 @@ impl Datastore {
         Datastore {
             buckets: BTreeMap::new(),
         }
+    }
+
+    pub fn apply_view(&mut self, view: DataView) -> Result<(), DatastoreError> {
+        for bucket in view.buckets {
+            let bucket_read = bucket.read().unwrap();
+            self.buckets
+                .insert(bucket_read.topic.handle().clone(), bucket.clone());
+        }
+        Ok(())
     }
 
     pub fn create_bucket<T: TopicKeyProvider>(&mut self, topic: &T) {
@@ -406,12 +421,25 @@ mod tests {
             .add_struct(&topic_b, time.clone(), test_struct_b.clone())
             .unwrap();
 
-        let view = DataView::new().add_query(&datastore, &topic_a).unwrap().add_query(&datastore, &topic_b).unwrap();
+        let view = DataView::new()
+            .add_query(&datastore, &topic_a)
+            .unwrap()
+            .add_query(&datastore, &topic_b)
+            .unwrap();
 
         let result: TestStructA = view.get_latest(&topic_a).unwrap();
         assert_eq!(result, test_struct_a);
 
         let result: TestStructB = view.get_latest(&topic_b).unwrap();
+        assert_eq!(result, test_struct_b);
+
+        let mut new_datastore = Datastore::new();
+        new_datastore.apply_view(view).unwrap();
+
+        let result: TestStructA = new_datastore.get_struct(&topic_a).unwrap();
+        assert_eq!(result, test_struct_a);
+
+        let result: TestStructB = new_datastore.get_struct(&topic_b).unwrap();
         assert_eq!(result, test_struct_b);
     }
 }
