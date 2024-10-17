@@ -1,6 +1,6 @@
 [package]
 name = "victory-data-store"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 
 [dependencies]
@@ -14,6 +14,8 @@ victory-time-rs = { git = "https://github.com/victoryforphil/victory-time", vers
 env_logger = "0.11.5"
 memuse = "0.2.1"
 
+[dev-dependencies]
+sensible-env-logger = "0.3"
 
 [dependencies.tracy]
 package = "tracy_full"

@@ -60,7 +60,7 @@ impl Hash for TopicKey {
 
 impl Ord for TopicKey {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.id().cmp(&other.id())
+        self.display_name().cmp(&other.display_name())
     }
 }
 

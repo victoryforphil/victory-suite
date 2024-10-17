@@ -7,6 +7,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use deserializer::PrimitiveDeserializer;
+    use log::trace;
     use serde::{Deserialize, Serialize};
     use serialize::to_map;
 
@@ -57,6 +58,7 @@ mod tests {
 
     #[test]
     fn test_complex_struct() {
+        sensible_env_logger::safe_init!();
         let complex = ComplexStruct {
             a: 42,
             b: TestSimpleStruct {
@@ -78,9 +80,10 @@ mod tests {
         };
 
         let serialized = to_map(&complex);
+       
         assert!(serialized.is_ok());
         let serialized = serialized.unwrap();
-        println!("{:#?}", serialized.keys());
+        trace!("Test serialized {:#?}", serialized);
         let mut deserializer = PrimitiveDeserializer::new(&serialized);
         let deserialized: ComplexStruct = Deserialize::deserialize(&mut deserializer).unwrap();
 
