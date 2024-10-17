@@ -21,6 +21,9 @@ pub trait System {
     fn get_subscribed_topics(&self) -> BTreeSet<TopicKey>;
     fn execute<'a>(&mut self, inputs: &'a DataView, dt: Timespan) -> DataView;
     fn cleanup(&mut self);
+    fn name(&self) -> String {
+        "".to_string()
+    }
 }
 
 pub type SystemHandle = Arc<Mutex<dyn System>>;

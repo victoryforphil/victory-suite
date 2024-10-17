@@ -24,6 +24,9 @@ impl TimeScaleSystem {
 }
 
 impl System for TimeScaleSystem {
+    fn name(&self) -> String {
+        "TimeScaleSystem".to_string()
+    }
     fn init(&mut self) {}
     fn cleanup(&mut self) {}
 
