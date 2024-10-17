@@ -30,7 +30,6 @@ impl TopicKeySection {
         let mut hasher = DefaultHasher::new();
         display_name.hash(&mut hasher);
         //let id = hasher.finish().to_string();
-        debug!("Generated ID {} for display name {}", id, display_name);
         TopicKeySection { id, display_name }
     }
 }
