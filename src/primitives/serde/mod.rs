@@ -49,7 +49,6 @@ mod tests {
         assert!(serialized.is_ok());
 
         let serialized = serialized.unwrap();
-        println!("{:#?}", serialized.keys());
         let mut deserializer = PrimitiveDeserializer::new(&serialized);
         let deserialized: TestSimpleStruct = Deserialize::deserialize(&mut deserializer).unwrap();
 

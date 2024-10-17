@@ -811,7 +811,7 @@ mod tests_serde {
         assert!(result.is_ok());
         let map = result.unwrap();
         assert_eq!(map.len(), 3);
-        println!("{:?}", map);
+
     }
 
     #[test]
@@ -820,6 +820,6 @@ mod tests_serde {
         let result = to_map(&test_struct);
         assert!(result.is_ok());
         let map = result.unwrap();
-        println!("{:#?}", map);
+     
     }
 }
