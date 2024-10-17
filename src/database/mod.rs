@@ -69,11 +69,17 @@ impl DataView {
         topic: &T,
     ) -> Result<S, DatastoreError> {
 
-
-
-        let value_map = self.get_latest_map(topic)?;
-        // Remove topic from the value map
-        let value_map = value_map.iter().map(|(k, v)| (k.remove_prefix(topic.key().clone()).unwrap(), v.clone())).collect();
+        let value_map = 
+            self.maps.iter()
+            .filter_map(|(k, v)| {
+                if k.key().is_child_of(topic.key()) {
+                    let key = k.key().remove_prefix(topic.key().clone()).unwrap();
+                    Some((key.handle(), v.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect::<BTreeMap<TopicKeyHandle, Primitives>>();
 
         // Deserialize the value map into the struct
         let mut deserializer = PrimitiveDeserializer::new(&value_map);
@@ -168,14 +174,15 @@ impl Datastore {
         // Get all the buckets that match the topic
         let buckets = self.get_buckets_matching(topic)?;
 
-        let mut value_map: BTreeMap<TopicKey, Primitives> = BTreeMap::new();
+        let mut value_map: BTreeMap<TopicKeyHandle, Primitives> = BTreeMap::new();
         for bucket in buckets {
             let bucket = bucket.read().unwrap();
 
             if let Some(value) = bucket.get_latest_datapoint() {
+                trace!("Added value to view: {:?} -> {:?}", value.topic.key(), value.value);
                 let mut key = value.topic.key().remove_prefix(topic.key().clone()).unwrap();
-                trace!("Added value to view: {:?} -> {:?}", key, value.value);
-                value_map.insert(key, value.value.clone());
+               
+                value_map.insert(key.handle(), value.value.clone());
           
             }
         }
