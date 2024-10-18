@@ -1,5 +1,5 @@
 
-use log::info;
+use log::{debug, info};
 use victory_data_store::database::{DataView, Datastore};
 use victory_time_rs::{Timepoint, Timespan};
 
@@ -41,10 +41,16 @@ impl BasherSysRunner {
             for system in self.systems.iter_mut() {
                 let mut system = system.lock().unwrap();
                 let sub = system.get_subscribed_topics();
+                
+              
                 let mut inputs = DataView::new();
                 for topic in sub.iter() {
+                    let dataview_start = Timepoint::now();
                     inputs = inputs.add_query(&self.data_store, topic).unwrap();
+                    let dataview_end = Timepoint::now();
+                    debug!("Dataview took {:?}ms", (dataview_end - dataview_start).ms());
                 }
+           
                 let new_data = system.execute(&inputs, self.dt.clone());
                 self.data_store.apply_view(new_data).unwrap();
             }
