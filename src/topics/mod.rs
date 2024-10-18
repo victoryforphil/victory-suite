@@ -81,9 +81,14 @@ impl PartialOrd for TopicKey {
 }
 
 impl PartialEq for TopicKey {
-    #[instrument(skip_all)]
+    #[instrument(skip_all, name = "TopicKey::eq")]
     fn eq(&self, other: &Self) -> bool {
-        self.id() == other.id()
+        self.sections.len() == other.sections.len()
+            && self
+                .sections
+                .iter()
+                .zip(other.sections.iter())
+                .all(|(a, b)| a.id == b.id)
     }
 }
 pub type TopicKeyHandle = Arc<TopicKey>;
@@ -113,8 +118,8 @@ impl TopicKey {
     pub fn from_str(display_name: &str) -> TopicKey {
         let sections: Vec<TopicKeySection> = display_name
             .split("/")
+            .filter(|s| !s.is_empty())
             .map(|s| TopicKeySection::new_generate(s))
-            .filter(|s| !s.display_name.is_empty())
             //Filter out empty strings
             .collect();
         TopicKey { sections }
@@ -191,9 +196,7 @@ impl TopicKey {
 
     #[instrument(skip_all)]
     pub fn remove_suffix(&self, suffix: &TopicKey) -> Option<TopicKey> {
-        if !self.is_parent_of(suffix) {
-            return None;
-        }
+      
 
         let sections = self.sections[..self.sections.len() - suffix.sections.len()].to_vec();
         Some(TopicKey::from_existing(sections))
@@ -219,7 +222,7 @@ impl TopicKey {
         child.is_child_of(self)
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip_all, name = "TopicKey::id")]
     pub fn id(&self) -> TopicIDType {
         let mut hasher = DefaultHasher::new();
         for section in &self.sections {
