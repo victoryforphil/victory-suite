@@ -62,7 +62,7 @@ mod tests {
         runner.add_system(Arc::new(Mutex::new(big_pub)));
         runner.add_system(Arc::new(Mutex::new(big_sub)));
         let now = Timepoint::now();
-        runner.dt = Timespan::new_hz(10.0);
+        runner.dt = Timespan::new_hz(25.0);
         runner.run(Timepoint::new_secs(10.0));
         let end = Timepoint::now();
         let duration = end - now;
