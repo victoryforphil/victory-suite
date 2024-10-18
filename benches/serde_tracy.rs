@@ -1,17 +1,23 @@
 use divan::counter::{BytesCount, ItemsCount};
-use divan::AllocProfiler;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_tracy::client::ProfiledAllocator;
 use victory_data_store::{primitives::serde::serialize::to_map, test_util::BigState};
-
 #[global_allocator]
-static ALLOC: AllocProfiler = AllocProfiler::system();
+static GLOBAL: ProfiledAllocator<std::alloc::System> =
+    ProfiledAllocator::new(std::alloc::System, 100);
 fn main() {
     // Run registered benchmarks.
+
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default()),
+    )
+    .expect("setup tracy layer");
     divan::main();
 }
 
 #[divan::bench]
 fn bench_to_map_rate(bencher: divan::Bencher) {
-    let len: usize = 100;
+    let len: usize = 10;
 
     bencher
         .with_inputs(|| -> Vec<BigState> { vec![BigState::new(); len] })
