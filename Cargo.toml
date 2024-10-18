@@ -11,5 +11,5 @@ pretty_env_logger = "0.5.0"
 strum = "0.26"
 strum_macros = "0.26"
 serde = { version = "1.0.210", features = ["derive"] }
-victory-data-store = { git = "https://github.com/victoryforphil/victory-data-store.git", version = "0.1.10" }
+victory-data-store = { git = "https://github.com/victoryforphil/victory-data-store.git", version = "0.1.11" }
 victory-time-rs = { git = "https://github.com/victoryforphil/victory-time.git", version = "0.1.1" }
