@@ -1,16 +1,19 @@
 use log::trace;
 use serde::de::{self, Deserialize, Deserializer, IntoDeserializer, MapAccess, SeqAccess, Visitor};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap};
 
-use crate::{primitives::Primitives, topics::{TopicKey, TopicKeyHandle, TopicKeyProvider}};
+use crate::{
+    primitives::Primitives,
+    topics::{TopicKey, TopicKeyHandle},
+};
 
 pub struct PrimitiveDeserializer<'de> {
-    flat_map: &'de BTreeMap<TopicKeyHandle, Primitives>,
+    flat_map: &'de HashMap<TopicKeyHandle, Primitives>,
     path: TopicKey,
 }
 
 impl<'de> PrimitiveDeserializer<'de> {
-    pub fn new(flat_map: &'de BTreeMap<TopicKeyHandle, Primitives>) -> Self {
+    pub fn new(flat_map: &'de HashMap<TopicKeyHandle, Primitives>) -> Self {
         PrimitiveDeserializer {
             flat_map,
             path: TopicKey::from_str(""),
@@ -19,14 +22,11 @@ impl<'de> PrimitiveDeserializer<'de> {
 
     fn get_value(&self) -> Option<&Primitives> {
         let value = self.flat_map.get(&self.path);
-        trace!("[get_value] path: {:?}, value: {:?}, keys: {:#?}", self.path, value, self.flat_map.keys());
         value
     }
 
     fn enter(&mut self, key: &TopicKey) {
-        
-        self.path = self.path.add_suffix(key.clone());
-        trace!("[enter] key: {:?}, path: {:?}", key, self.path);
+        self.path.sections.extend(key.sections.clone());
     }
 
     fn exit(&mut self) {
@@ -68,15 +68,18 @@ impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
         V: Visitor<'de>,
     {
         // Add the struct name to the path
-        trace!("[deserialize_struct] path: {:?}, name: {:?}", self.path, name);
-        
-    
+        trace!(
+            "[deserialize_struct] path: {:?}, name: {:?}",
+            self.path,
+            name
+        );
+
         let res = visitor.visit_map(StructAccess {
             de: self,
-            fields: fields.iter().cloned().collect(),
+            fields: fields.to_vec(),
             field_index: 0,
         });
-       
+
         res
     }
 
@@ -84,8 +87,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        let prefix = self.path.clone();
-        let indices = self.collect_sequence_indices(&prefix);
+        let indices = self.collect_sequence_indices(&self.path);
         let seq_access = SeqAccessImpl {
             de: self,
             indices,
@@ -98,9 +100,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        let prefix = self.path.clone();
-        let keys = self.collect_map_keys(&prefix);
-        trace!("[deserialize_map] keys: {:?}", keys);
+        let keys = self.collect_map_keys(&self.path);
         let map_access = MapAccessImpl {
             de: self,
             keys,
@@ -463,7 +463,7 @@ impl<'de, 'a> de::VariantAccess<'de> for VariantAccessImpl<'a, 'de> {
         self.de.enter(&TopicKey::from_str("")); // Entering empty string to append '/' to path
         let value = visitor.visit_map(StructAccess {
             de: self.de,
-            fields: _fields.iter().cloned().collect(),
+            fields: _fields.to_vec(),
             field_index: 0,
         })?;
         self.de.exit();
@@ -473,11 +473,12 @@ impl<'de, 'a> de::VariantAccess<'de> for VariantAccessImpl<'a, 'de> {
 
 impl<'de, 'a> PrimitiveDeserializer<'de> {
     fn collect_sequence_indices(&self, prefix: &TopicKey) -> Vec<usize> {
-        let mut indices = Vec::new(); 
+        let mut indices = Vec::new();
         for key in self.flat_map.keys() {
             if key.is_child_of(prefix) {
-                let remainder = &key.remove_prefix(prefix.clone()).unwrap();
-                if let Ok(idx) = remainder.display_name().parse::<usize>() {
+                let key_idx = key.sections.last().unwrap();
+                if let Ok(idx) = key_idx.display_name.parse::<usize>() {
+                    trace!("idx: {:?}", idx);
                     indices.push(idx);
                 }
             }
@@ -491,14 +492,12 @@ impl<'de, 'a> PrimitiveDeserializer<'de> {
         let mut keys = BTreeSet::new();
 
         for key in self.flat_map.keys() {
-           
             if key.is_child_of(prefix) {
                 let remainder = &key.remove_prefix(prefix.clone()).unwrap();
                 let remainder = TopicKey::from_existing(vec![remainder.sections[0].clone()]);
-                keys.insert(remainder.clone());
+                keys.insert(remainder);
             }
         }
-        trace!("[collect_map_keys] keys: {:?}", keys);
         keys
     }
 }
@@ -530,7 +529,7 @@ impl<'de, 'a> MapAccess<'de> for StructAccess<'a, 'de> {
     where
         V: de::DeserializeSeed<'de>,
     {
-        let key = self.fields[self.field_index - 1 ];
+        let key = self.fields[self.field_index - 1];
         self.de.enter(&TopicKey::from_str(key));
         let value = seed.deserialize(&mut *self.de)?;
         self.de.exit();
@@ -570,7 +569,6 @@ struct MapAccessImpl<'a, 'de> {
     de: &'a mut PrimitiveDeserializer<'de>,
     keys: BTreeSet<TopicKey>,
     index: usize,
-   
 }
 impl<'de, 'a> MapAccess<'de> for MapAccessImpl<'a, 'de> {
     type Error = de::value::Error;
@@ -581,9 +579,9 @@ impl<'de, 'a> MapAccess<'de> for MapAccessImpl<'a, 'de> {
     {
         if let Some(key) = self.keys.iter().skip(self.index).next() {
             self.index += 1;
-            seed.deserialize(key.display_name().into_deserializer()).map(Some)
+            seed.deserialize(key.display_name().into_deserializer())
+                .map(Some)
         } else {
-         
             Ok(None)
         }
     }
@@ -600,11 +598,11 @@ impl<'de, 'a> MapAccess<'de> for MapAccessImpl<'a, 'de> {
         Ok(value) */
         let key = self.keys.iter().skip(self.index - 1).next().unwrap();
         self.de.enter(&key);
-      
+
         let value = seed.deserialize(&mut *self.de)?;
 
         self.de.exit();
-      
+
         Ok(value)
     }
 }
@@ -614,7 +612,7 @@ mod tests {
     use serde::Deserialize;
 
     use super::*;
-    use std::collections::BTreeMap;
+    use std::collections::HashMap;
 
     #[derive(Debug, PartialEq, Deserialize)]
     struct TestSimpleStruct {
@@ -631,7 +629,7 @@ mod tests {
     #[test]
     fn test_deserialize_primitives() {
         sensible_env_logger::safe_init!();
-        let mut flat_map = BTreeMap::new();
+        let mut flat_map = HashMap::new();
         flat_map.insert(
             TopicKey::from_str("/_type").handle(),
             Primitives::StructType("TestComplexStruct".to_string()),
@@ -653,10 +651,10 @@ mod tests {
             Primitives::Integer(42),
         );
         flat_map.insert(
-            TopicKey::from_str("/simple_struct/simple_string").handle() ,
+            TopicKey::from_str("/simple_struct/simple_string").handle(),
             Primitives::Text("Test String".to_string()),
         );
-        
+
         let mut deserializer = PrimitiveDeserializer::new(&flat_map);
         let result: TestComplexStruct = Deserialize::deserialize(&mut deserializer).unwrap();
 
