@@ -1,10 +1,11 @@
 use log::trace;
 use serde::de::{self, Deserialize, Deserializer, IntoDeserializer, MapAccess, SeqAccess, Visitor};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use tracing::instrument;
 
 use crate::{
     primitives::Primitives,
-    topics::{TopicKey, TopicKeyHandle},
+    topics::{TopicKey, TopicKeyHandle, TopicKeySection},
 };
 
 pub struct PrimitiveDeserializer<'de> {
@@ -13,22 +14,24 @@ pub struct PrimitiveDeserializer<'de> {
 }
 
 impl<'de> PrimitiveDeserializer<'de> {
+    #[instrument(skip_all, name = "PrimitiveDeserializer::new")]
     pub fn new(flat_map: &'de HashMap<TopicKeyHandle, Primitives>) -> Self {
         PrimitiveDeserializer {
             flat_map,
-            path: TopicKey::from_str(""),
+            path: TopicKey::empty(),
         }
     }
 
+    #[instrument(skip_all, name = "PrimitiveDeserializer::get_value")]
     fn get_value(&self) -> Option<&Primitives> {
         let value = self.flat_map.get(&self.path);
         value
     }
-
+    #[instrument(skip_all, name = "PrimitiveDeserializer::enter")]
     fn enter(&mut self, key: &TopicKey) {
         self.path.sections.extend(key.sections.clone());
     }
-
+    #[instrument(skip_all, name = "PrimitiveDeserializer::exit")]
     fn exit(&mut self) {
         trace!("[exit] path: {:?}", self.path);
         self.path.sections.pop();
@@ -38,6 +41,7 @@ impl<'de> PrimitiveDeserializer<'de> {
 impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
     type Error = de::value::Error;
 
+    #[instrument(skip_all, name = "PrimitiveDeserializer::deserialize_any")]
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
@@ -58,6 +62,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
         }
     }
 
+    #[instrument(skip_all, name = "PrimitiveDeserializer::deserialize_struct")]
     fn deserialize_struct<V>(
         self,
         name: &'static str,
@@ -82,7 +87,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
 
         res
     }
-
+    #[instrument(skip_all, name = "PrimitiveDeserializer::deserialize_seq")]
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
@@ -95,7 +100,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
         };
         visitor.visit_seq(seq_access)
     }
-
+    #[instrument(skip_all, name = "PrimitiveDeserializer::deserialize_map")]
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
@@ -109,6 +114,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
         visitor.visit_map(map_access)
     }
 
+    #[instrument(skip_all, name = "PrimitiveDeserializer::deserialize_bool")]
     fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
@@ -366,7 +372,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
             index: 0,
         })?)
     }
-
+    #[instrument(skip_all, name = "PrimitiveDeserializer::deserialize_enum")]
     fn deserialize_enum<V>(
         self,
         name: &'static str,
@@ -378,7 +384,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
     {
         visitor.visit_enum(EnumAccessImpl { de: self })
     }
-
+    #[instrument(skip_all, name = "PrimitiveDeserializer::deserialize_identifier")]
     fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
@@ -386,6 +392,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut PrimitiveDeserializer<'de> {
         visitor.visit_str(&self.path.display_name())
     }
 
+    #[instrument(skip_all, name = "PrimitiveDeserializer::deserialize_ignored_any")]
     fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
@@ -400,7 +407,7 @@ struct EnumAccessImpl<'a, 'de> {
 impl<'de, 'a> de::EnumAccess<'de> for EnumAccessImpl<'a, 'de> {
     type Error = de::value::Error;
     type Variant = VariantAccessImpl<'a, 'de>;
-
+    #[instrument(skip_all, name = "EnumAccessImpl::variant_seed")]
     fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant), Self::Error>
     where
         V: de::DeserializeSeed<'de>,
@@ -421,27 +428,27 @@ struct VariantAccessImpl<'a, 'de> {
 
 impl<'de, 'a> de::VariantAccess<'de> for VariantAccessImpl<'a, 'de> {
     type Error = de::value::Error;
-
+    #[instrument(skip_all, name = "VariantAccessImpl::unit_variant")]
     fn unit_variant(self) -> Result<(), Self::Error> {
         Ok(())
     }
-
+    #[instrument(skip_all, name = "VariantAccessImpl::newtype_variant_seed")]
     fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value, Self::Error>
     where
         T: de::DeserializeSeed<'de>,
     {
         // Enter the path to the variant's associated data
-        self.de.enter(&TopicKey::from_str("")); // Entering empty string to append '/' to path
+        self.de.enter(&TopicKey::empty()); // Entering empty string to append '/' to path
         let value = seed.deserialize(&mut *self.de)?;
         self.de.exit();
         Ok(value)
     }
-
+    #[instrument(skip_all, name = "VariantAccessImpl::tuple_variant")]
     fn tuple_variant<V>(self, _len: usize, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        self.de.enter(&TopicKey::from_str("")); // Entering empty string to append '/' to path
+        self.de.enter(&TopicKey::empty()); // Entering empty string to append '/' to path
         let indices = self.de.collect_sequence_indices(&self.de.path);
         let value = visitor.visit_seq(SeqAccessImpl {
             de: self.de,
@@ -451,7 +458,7 @@ impl<'de, 'a> de::VariantAccess<'de> for VariantAccessImpl<'a, 'de> {
         self.de.exit();
         Ok(value)
     }
-
+    #[instrument(skip_all, name = "VariantAccessImpl::struct_variant")]
     fn struct_variant<V>(
         self,
         _fields: &'static [&'static str],
@@ -460,7 +467,7 @@ impl<'de, 'a> de::VariantAccess<'de> for VariantAccessImpl<'a, 'de> {
     where
         V: Visitor<'de>,
     {
-        self.de.enter(&TopicKey::from_str("")); // Entering empty string to append '/' to path
+        self.de.enter(&TopicKey::empty()); // Entering empty string to append '/' to path
         let value = visitor.visit_map(StructAccess {
             de: self.de,
             fields: _fields.to_vec(),
@@ -472,6 +479,7 @@ impl<'de, 'a> de::VariantAccess<'de> for VariantAccessImpl<'a, 'de> {
 }
 
 impl<'de, 'a> PrimitiveDeserializer<'de> {
+    #[instrument(skip_all, name = "PrimitiveDeserializer::collect_sequence_indices")]
     fn collect_sequence_indices(&self, prefix: &TopicKey) -> Vec<usize> {
         let mut indices = Vec::new();
         for key in self.flat_map.keys() {
@@ -487,14 +495,22 @@ impl<'de, 'a> PrimitiveDeserializer<'de> {
         indices.dedup();
         indices
     }
-
-    fn collect_map_keys(&self, prefix: &TopicKey) -> BTreeSet<TopicKey> {
-        let mut keys = BTreeSet::new();
+    #[instrument(skip_all, name = "PrimitiveDeserializer::collect_map_keys")]
+    fn collect_map_keys(&self, prefix: &TopicKey) -> HashSet<TopicKey> {
+        let mut keys = HashSet::new();
 
         for key in self.flat_map.keys() {
+            
             if key.is_child_of(prefix) {
-                let remainder = &key.remove_prefix(prefix.clone()).unwrap();
-                let remainder = TopicKey::from_existing(vec![remainder.sections[0].clone()]);
+                let remainder = key
+                    .sections
+                    .iter()
+                    .skip(prefix.sections.len())
+                    .take(1)
+                    .cloned()
+                    .collect();
+
+                let remainder = TopicKey::from_existing(remainder);
                 keys.insert(remainder);
             }
         }
@@ -511,7 +527,7 @@ struct StructAccess<'a, 'de> {
 
 impl<'de, 'a> MapAccess<'de> for StructAccess<'a, 'de> {
     type Error = de::value::Error;
-
+    #[instrument(skip_all, name = "StructAccess::next_key_seed")]
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
     where
         K: de::DeserializeSeed<'de>,
@@ -524,13 +540,15 @@ impl<'de, 'a> MapAccess<'de> for StructAccess<'a, 'de> {
             Ok(None)
         }
     }
-
+    #[instrument(skip_all, name = "StructAccess::next_value_seed")]
     fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Self::Error>
     where
         V: de::DeserializeSeed<'de>,
     {
         let key = self.fields[self.field_index - 1];
-        self.de.enter(&TopicKey::from_str(key));
+        self.de.enter(&TopicKey::from_existing(vec![
+            TopicKeySection::new_generate(key),
+        ]));
         let value = seed.deserialize(&mut *self.de)?;
         self.de.exit();
         Ok(value)
@@ -546,7 +564,7 @@ struct SeqAccessImpl<'a, 'de> {
 
 impl<'de, 'a> SeqAccess<'de> for SeqAccessImpl<'a, 'de> {
     type Error = de::value::Error;
-
+    #[instrument(skip_all, name = "SeqAccessImpl::next_element_seed")]
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
     where
         T: de::DeserializeSeed<'de>,
@@ -567,12 +585,12 @@ impl<'de, 'a> SeqAccess<'de> for SeqAccessImpl<'a, 'de> {
 // Implement MapAccess for maps
 struct MapAccessImpl<'a, 'de> {
     de: &'a mut PrimitiveDeserializer<'de>,
-    keys: BTreeSet<TopicKey>,
+    keys: HashSet<TopicKey>,
     index: usize,
 }
 impl<'de, 'a> MapAccess<'de> for MapAccessImpl<'a, 'de> {
     type Error = de::value::Error;
-
+    #[instrument(skip_all, name = "MapAccessImpl::next_key_seed")]
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
     where
         K: de::DeserializeSeed<'de>,
@@ -585,7 +603,7 @@ impl<'de, 'a> MapAccess<'de> for MapAccessImpl<'a, 'de> {
             Ok(None)
         }
     }
-
+    #[instrument(skip_all, name = "MapAccessImpl::next_value_seed")]
     fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Self::Error>
     where
         V: de::DeserializeSeed<'de>,
@@ -610,6 +628,8 @@ impl<'de, 'a> MapAccess<'de> for MapAccessImpl<'a, 'de> {
 #[cfg(test)]
 mod tests {
     use serde::Deserialize;
+
+    use crate::topics::TopicKeyProvider;
 
     use super::*;
     use std::collections::HashMap;
