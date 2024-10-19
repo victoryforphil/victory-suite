@@ -3,13 +3,14 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use serde::{Deserialize, Serialize};
 use victory_time_rs::Timepoint;
 
 use crate::{
     primitives::Primitives,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Datapoint {
     pub topic: TopicKeyHandle,
     pub time: Timepoint,
