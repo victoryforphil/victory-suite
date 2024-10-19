@@ -45,10 +45,7 @@ impl BasherSysRunner {
               
                 let mut inputs = DataView::new();
                 for topic in sub.iter() {
-                    let dataview_start = Timepoint::now();
                     inputs = inputs.add_query(&self.data_store, topic).unwrap();
-                    let dataview_end = Timepoint::now();
-                    debug!("Dataview took {:?}ms", (dataview_end - dataview_start).ms());
                 }
            
                 let new_data = system.execute(&inputs, self.dt.clone());

@@ -38,7 +38,6 @@ impl System for BigStateSubscriber {
 
     fn execute(&mut self, inputs: &DataView, _dt: Timespan) -> DataView {
         let big_state: BigState = inputs.get_latest(&TopicKey::from_str("big_state")).unwrap();
-        debug!("{:?}", big_state.pose.position);
         DataView::new()
     }
 
