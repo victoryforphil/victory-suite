@@ -9,23 +9,29 @@ use crate::{
 };
 use log::trace;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 use victory_time_rs::Timepoint;
 
 #[derive(Debug, Clone)]
 pub struct Datastore {
-    buckets: BTreeMap<TopicKeyHandle, BucketHandle>,
+    buckets: HashMap<TopicKeyHandle, BucketHandle>,
 }
 #[derive(Debug, Clone)]
 pub struct DataView {
-    pub maps: BTreeMap<TopicKey, Primitives>,
+    pub maps: HashMap<TopicKey, Primitives>,
+}
+
+impl Default for DataView {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DataView {
     pub fn new() -> DataView {
         DataView {
-            maps: BTreeMap::new(),
+            maps: HashMap::new(),
         }
     }
     pub fn add_query(
@@ -117,10 +123,16 @@ pub enum DatastoreError {
     BucketNotFound(TopicKey),
 }
 
+impl Default for Datastore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Datastore {
     pub fn new() -> Datastore {
         Datastore {
-            buckets: BTreeMap::new(),
+            buckets: HashMap::new(),
         }
     }
 
@@ -263,8 +275,8 @@ impl Datastore {
 
     pub fn get_latest_primitives<T: TopicKeyProvider>(
         &self,
-        topics: BTreeSet<T>,
-    ) -> BTreeMap<TopicKey, Primitives> {
+        topics: HashSet<T>,
+    ) -> HashMap<TopicKey, Primitives> {
         topics
             .iter()
             .filter_map(|t| self.get_latest_primitive(t).map(|p| (t.key().clone(), p)))
@@ -289,10 +301,10 @@ impl Datastore {
         self.buckets.keys().cloned().collect()
     }
 
-    pub fn get_all_display_names(&self) -> BTreeSet<String> {
+    pub fn get_all_display_names(&self) -> HashMap<TopicKeyHandle, String> {
         self.buckets
             .keys()
-            .map(|k| k.key().display_name())
+            .map(|k| (k.clone(), k.key().display_name()))
             .collect()
     }
     pub fn get_updated_keys<T: TopicKeyProvider>(
@@ -335,12 +347,12 @@ mod tests {
         let topic = TopicKey::from_str("test/topic");
 
         let bucket_failed = datastore.get_bucket(&topic);
-        assert_eq!(bucket_failed.is_err(), true);
+        assert!(bucket_failed.is_err());
 
         datastore.create_bucket(&topic);
 
         let bucket = datastore.get_bucket(&topic);
-        assert_eq!(bucket.is_ok(), true);
+        assert!(bucket.is_ok());
         assert_eq!(bucket.unwrap().read().unwrap().topic, topic.handle());
     }
 
@@ -400,7 +412,7 @@ mod tests {
         let bucket = bucket.read().unwrap();
         let datapoints = bucket.get_datapoints();
         assert_eq!(datapoints.len(), 1);
-        assert_eq!(datapoints[0].time, time.clone().into());
+        assert_eq!(datapoints[0].time, time.clone());
         assert_eq!(datapoints[0].value, 42.into());
     }
 
@@ -447,7 +459,6 @@ mod tests {
     }
     #[test]
     pub fn test_dataview_add_latest() {
-        let mut datastore = Datastore::new();
         let topic: TopicKey = "/test/topic".into();
 
         let test_struct = TestStructA {

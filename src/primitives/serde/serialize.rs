@@ -1,12 +1,18 @@
 use serde::{ser, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use tracing::instrument;
 
 use crate::{
     primitives::{blob::VicBlob, Primitives},
-    topics::{TopicKey, TopicKeyHandle, TopicKeyProvider, TopicKeySection},
+    topics::{TopicKey, TopicKeyHandle, TopicKeySection},
 };
 
+// Create a global copy for _type using a lazy static
+lazy_static::lazy_static! {
+    static ref _TYPE_KEY: TopicKey = TopicKey::from_str("_type");
+}
+#[allow(unused_imports)]
+#[allow(unused_variables)]
 // Define a custom error type for serialization errors
 #[derive(Debug)]
 pub enum PrimitiveError {
@@ -33,8 +39,10 @@ pub type PrimitiveResult<T> = Result<T, PrimitiveError>;
 
 pub struct PrimitiveSerializer {
     pub prefix: TopicKey,
-    pub map: HashMap<TopicKeyHandle, Primitives>,
+    pub map: Vec<(TopicKeyHandle, Primitives)>,
 }
+#[allow(unused_imports)]
+#[allow(unused_variables)]
 #[instrument(skip_all)]
 pub fn to_map<T>(value: &T) -> PrimitiveResult<HashMap<TopicKeyHandle, Primitives>>
 where
@@ -42,10 +50,11 @@ where
 {
     let mut serializer = PrimitiveSerializer {
         prefix: TopicKey::empty(),
-        map: HashMap::new(),
+        map: Vec::new(),
     };
     value.serialize(&mut serializer)?;
-    Ok(serializer.map)
+    let map = HashMap::from_iter(serializer.map.into_iter());
+    Ok(map)
 }
 
 impl<'a> ser::Serializer for &'a mut PrimitiveSerializer {
@@ -61,8 +70,8 @@ impl<'a> ser::Serializer for &'a mut PrimitiveSerializer {
     type SerializeStructVariant = SerializeStructVariant<'a>;
     #[instrument(skip_all)]
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
-        let key = self.prefix.clone().into();
-        self.map.insert(key, Primitives::Boolean(v));
+        self.map
+            .push((self.prefix.clone().into(), Primitives::Boolean(v)));
         Ok(())
     }
     #[instrument(skip_all)]
@@ -79,8 +88,8 @@ impl<'a> ser::Serializer for &'a mut PrimitiveSerializer {
     }
     #[instrument(skip_all)]
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        let key = self.prefix.clone().into();
-        self.map.insert(key, Primitives::Integer(v));
+        self.map
+            .push((self.prefix.clone().into(), Primitives::Integer(v)));
         Ok(())
     }
     #[instrument(skip_all)]
@@ -109,8 +118,8 @@ impl<'a> ser::Serializer for &'a mut PrimitiveSerializer {
     }
     #[instrument(skip_all)]
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
-        let key = self.prefix.clone().into();
-        self.map.insert(key, Primitives::Float(v));
+        self.map
+            .push((self.prefix.clone().into(), Primitives::Float(v)));
         Ok(())
     }
     #[instrument(skip_all)]
@@ -119,15 +128,16 @@ impl<'a> ser::Serializer for &'a mut PrimitiveSerializer {
     }
     #[instrument(skip_all)]
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        let key = self.prefix.clone().into();
-        self.map.insert(key, Primitives::Text(v.to_string()));
+        self.map
+            .push((self.prefix.clone().into(), Primitives::Text(v.to_string())));
         Ok(())
     }
     #[instrument(skip_all)]
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        let key = self.prefix.clone().into();
-        self.map
-            .insert(key, Primitives::Blob(VicBlob::new_from_data(v.to_vec())));
+        self.map.push((
+            self.prefix.clone().into(),
+            Primitives::Blob(VicBlob::new_from_data(v.to_vec())),
+        ));
         Ok(())
     }
     #[instrument(skip_all)]
@@ -159,8 +169,10 @@ impl<'a> ser::Serializer for &'a mut PrimitiveSerializer {
         _variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        let key = self.prefix.clone().into();
-        self.map.insert(key, Primitives::Text(variant.to_string()));
+        self.map.push((
+            self.prefix.clone().into(),
+            Primitives::Text(variant.to_string()),
+        ));
         Ok(())
     }
 
@@ -185,7 +197,7 @@ impl<'a> ser::Serializer for &'a mut PrimitiveSerializer {
     where
         T: Serialize,
     {
-        self.prefix.add_suffix_mut(TopicKey::from_str(variant));
+        self.prefix.add_suffix_mut(&TopicKey::from_str(variant));
         value.serialize(&mut *self)?;
         self.prefix.sections.pop();
         Ok(())
@@ -217,7 +229,7 @@ impl<'a> ser::Serializer for &'a mut PrimitiveSerializer {
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        self.prefix.add_suffix_mut(TopicKey::from_str(variant));
+        self.prefix.add_suffix_mut(&TopicKey::from_str(variant));
 
         Ok(SerializeSeq {
             ser: self,
@@ -239,11 +251,11 @@ impl<'a> ser::Serializer for &'a mut PrimitiveSerializer {
     ) -> Result<Self::SerializeStruct, Self::Error> {
         // Create a new StructType and serialize it
         let mut new_prefix = self.prefix.clone();
-        new_prefix.add_suffix_mut(TopicKey::from_existing(vec![
-            TopicKeySection::new_generate("_type"),
-        ]));
-        self.map
-            .insert(new_prefix.into(), Primitives::StructType(name.to_string()));
+        new_prefix.add_suffix_mut(&_TYPE_KEY);
+        self.map.push((
+            new_prefix.clone().into(),
+            Primitives::StructType(name.to_string()),
+        ));
 
         Ok(SerializeStruct { ser: self })
     }
@@ -257,7 +269,7 @@ impl<'a> ser::Serializer for &'a mut PrimitiveSerializer {
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         let current_prefix = self.prefix.clone();
 
-        self.prefix.add_suffix_mut(TopicKey::from_str(variant));
+        self.prefix.add_suffix_mut(&TopicKey::from_str(variant));
 
         Ok(SerializeStructVariant {
             ser: self,
@@ -282,7 +294,7 @@ impl<'a> ser::SerializeSeq for SerializeSeq<'a> {
     {
         self.ser
             .prefix
-            .add_suffix_mut(TopicKey::from_str(&self.index.to_string()));
+            .add_suffix_mut(&TopicKey::from_str(&self.index.to_string()));
         self.index += 1;
         value.serialize(&mut *self.ser)?;
         self.ser.prefix.sections.pop();
@@ -361,7 +373,7 @@ impl<'a> ser::SerializeMap for SerializeMap<'a> {
     {
         let mut key_serializer = KeySerializer::default();
         key.serialize(&mut key_serializer)?;
-        self.ser.prefix.add_suffix_mut(key_serializer.key);
+        self.ser.prefix.add_suffix_mut(&key_serializer.key);
         Ok(())
     }
 
@@ -397,8 +409,7 @@ impl<'a> ser::SerializeStruct for SerializeStruct<'a> {
     where
         T: Serialize,
     {
-        let key = TopicKey::from_str(key);
-        self.ser.prefix.add_suffix_mut(key);
+        self.ser.prefix.add_suffix_mut(&TopicKey::from_str(key));
         value.serialize(&mut *self.ser)?;
         self.ser.prefix.sections.pop();
 
@@ -431,7 +442,7 @@ impl<'a> ser::SerializeStructVariant for SerializeStructVariant<'a> {
     {
         let key = TopicKey::from_str(key);
         let n_sec = self.ser.prefix.sections.len();
-        self.ser.prefix.add_suffix_mut(key);
+        self.ser.prefix.add_suffix_mut(&key);
         value.serialize(&mut *self.ser)?;
         self.ser.prefix.sections.truncate(n_sec);
         Ok(())
@@ -456,7 +467,6 @@ impl Default for KeySerializer {
         }
     }
 }
-
 impl<'a> ser::Serializer for &'a mut KeySerializer {
     type Ok = ();
     type Error = PrimitiveError;
@@ -486,47 +496,47 @@ impl<'a> ser::Serializer for &'a mut KeySerializer {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
+    fn serialize_i16(self, _v: i16) -> Result<Self::Ok, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
+    fn serialize_i32(self, _v: i32) -> Result<Self::Ok, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
+    fn serialize_i64(self, _v: i64) -> Result<Self::Ok, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
+    fn serialize_u8(self, _v: u8) -> Result<Self::Ok, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
+    fn serialize_u16(self, _v: u16) -> Result<Self::Ok, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
+    fn serialize_u32(self, _v: u32) -> Result<Self::Ok, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
+    fn serialize_u64(self, _v: u64) -> Result<Self::Ok, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
+    fn serialize_f32(self, _v: f32) -> Result<Self::Ok, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
+    fn serialize_f64(self, _v: f64) -> Result<Self::Ok, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
+    fn serialize_char(self, _v: char) -> Result<Self::Ok, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
+    fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
@@ -534,30 +544,30 @@ impl<'a> ser::Serializer for &'a mut KeySerializer {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
+    fn serialize_some<T>(self, _value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: ?Sized + Serialize,
     {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
     fn serialize_unit_variant(
         self,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
     fn serialize_newtype_struct<T>(
         self,
-        name: &'static str,
-        value: &T,
+        _name: &'static str,
+        _value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: ?Sized + Serialize,
@@ -567,10 +577,10 @@ impl<'a> ser::Serializer for &'a mut KeySerializer {
 
     fn serialize_newtype_variant<T>(
         self,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
-        value: &T,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: ?Sized + Serialize,
@@ -578,50 +588,50 @@ impl<'a> ser::Serializer for &'a mut KeySerializer {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
     fn serialize_tuple_struct(
         self,
-        name: &'static str,
-        len: usize,
+        _name: &'static str,
+        _len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
     fn serialize_tuple_variant(
         self,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
-        len: usize,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
-    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
     fn serialize_struct(
         self,
-        name: &'static str,
-        len: usize,
+        _name: &'static str,
+        _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
 
     fn serialize_struct_variant(
         self,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
-        len: usize,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         Err(PrimitiveError::Message("Unsupported key type".into()))
     }
@@ -817,6 +827,6 @@ mod tests_serde {
         let test_struct = ComplexStruct::default();
         let result = to_map(&test_struct);
         assert!(result.is_ok());
-        let map = result.unwrap();
+        let _map = result.unwrap();
     }
 }

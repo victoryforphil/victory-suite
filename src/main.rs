@@ -1,10 +1,12 @@
 use log::info;
-
+#[allow(unused_imports)]
+#[allow(unused_variables)]
 use serde::{Deserialize, Serialize};
 use victory_data_store::{database::Datastore, topics::TopicKey};
 use victory_time_rs::Timepoint;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "uav_state")]
+#[derive(Default)]
 pub struct UAVState {
     pub position: Pose,
     pub velocity: Pose,
@@ -30,16 +32,6 @@ impl Default for Pose {
             roll: 3.0,
             pitch: 4.0,
             yaw: 5.0,
-        }
-    }
-}
-
-impl Default for UAVState {
-    fn default() -> UAVState {
-        UAVState {
-            position: Pose::default(),
-            velocity: Pose::default(),
-            acceleration: Pose::default(),
         }
     }
 }

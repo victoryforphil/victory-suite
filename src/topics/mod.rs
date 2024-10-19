@@ -1,5 +1,5 @@
 use std::{
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::{BuildHasher, DefaultHasher, Hash, Hasher},
     sync::Arc,
 };
 
@@ -13,7 +13,7 @@ pub struct TopicKeySection {
     pub id: TopicIDType,
     pub display_name: String,
 }
-
+pub type TopicKeySectionHandle = Arc<TopicKeySection>;
 impl Hash for TopicKeySection {
     #[instrument(skip_all)]
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -26,11 +26,19 @@ impl TopicKeySection {
     pub fn new_existing(id: TopicIDType, display_name: String) -> TopicKeySection {
         TopicKeySection { id, display_name }
     }
+
+    pub fn handle(&self) -> TopicKeySectionHandle {
+        Arc::new(self.clone())
+    }
+
+    pub fn into_handle(self) -> TopicKeySectionHandle {
+        Arc::new(self)
+    }
     #[instrument(skip_all)]
     pub fn new_generate(display_name: &str) -> TopicKeySection {
         let mut hasher = DefaultHasher::new();
         display_name.hash(&mut hasher);
-        let id = hasher.finish();
+        let id = hasher.finish() as TopicIDType;
         TopicKeySection {
             id,
             display_name: display_name.to_string(),
@@ -39,7 +47,7 @@ impl TopicKeySection {
 }
 #[derive(Clone, Eq, Serialize, Deserialize)]
 pub struct TopicKey {
-    pub sections: Vec<TopicKeySection>,
+    pub sections: Vec<TopicKeySectionHandle>,
 }
 
 // Implement string formatting / printing (dispaly name)
@@ -116,17 +124,16 @@ impl TopicKeyProvider for TopicKey {
 impl TopicKey {
     #[instrument(skip_all)]
     pub fn from_str(display_name: &str) -> TopicKey {
-        let sections: Vec<TopicKeySection> = display_name
-            .split("/")
+        let sections: Vec<TopicKeySectionHandle> = display_name
+            .split('/')
             .filter(|s| !s.is_empty())
-            .map(|s| TopicKeySection::new_generate(s))
-            //Filter out empty strings
+            .map(|s| TopicKeySection::new_generate(s).into_handle())
             .collect();
         TopicKey { sections }
     }
 
     #[instrument(skip_all)]
-    pub fn from_existing(sections: Vec<TopicKeySection>) -> TopicKey {
+    pub fn from_existing(sections: Vec<TopicKeySectionHandle>) -> TopicKey {
         TopicKey { sections }
     }
 
@@ -178,26 +185,24 @@ impl TopicKey {
     }
 
     pub fn add_suffix_owned(mut self, suffix: TopicKey) -> TopicKey {
-        self.add_suffix_mut(suffix);
+        self.add_suffix_mut(&suffix);
         self
     }
 
     #[instrument(skip_all)]
-    pub fn add_suffix(&self, suffix: TopicKey) -> TopicKey {
+    pub fn add_suffix(&self, suffix: &TopicKey) -> TopicKey {
         let mut new_key = self.clone();
-        new_key.add_suffix_mut(suffix);
+        new_key.add_suffix_mut(&suffix);
         new_key
     }
 
     #[instrument(skip_all)]
-    pub fn add_suffix_mut(&mut self, suffix: TopicKey) {
-        self.sections.extend(suffix.sections);
+    pub fn add_suffix_mut(&mut self, suffix: &TopicKey) {
+        self.sections.extend(suffix.sections.clone());
     }
 
     #[instrument(skip_all)]
     pub fn remove_suffix(&self, suffix: &TopicKey) -> Option<TopicKey> {
-      
-
         let sections = self.sections[..self.sections.len() - suffix.sections.len()].to_vec();
         Some(TopicKey::from_existing(sections))
     }
@@ -228,7 +233,7 @@ impl TopicKey {
         for section in &self.sections {
             section.id.hash(&mut hasher);
         }
-        hasher.finish()
+        hasher.finish() as TopicIDType
     }
 }
 
@@ -279,7 +284,7 @@ mod tests {
     fn test_topic_suffix() {
         let key = TopicKey::from_str("test/test");
         let suffix = TopicKey::from_str("suffix/key");
-        let suffixed = key.add_suffix(suffix);
+        let suffixed = key.add_suffix(&suffix);
         assert_eq!(suffixed.display_name(), "test/test/suffix/key");
     }
 }
