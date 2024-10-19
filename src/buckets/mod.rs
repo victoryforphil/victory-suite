@@ -22,7 +22,6 @@ pub type BucketHandle = Arc<RwLock<Bucket>>;
 
 impl Bucket {
     pub fn new<T: TopicKeyProvider>(topic: &T) -> BucketHandle {
-        debug!("Creating new bucket for topic {:?}", topic.key());
         Arc::new(RwLock::new(Bucket {
             topic: topic.handle(),
             values: BTreeMap::new(),
