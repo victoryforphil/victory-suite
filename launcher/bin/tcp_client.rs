@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use log::debug;
+use log::{debug, info};
 use pubsub::{
     adapters::{
         tcp::{TCPClientAdapter, TCPClientOptions},
@@ -26,7 +26,7 @@ async fn main() {
         let mut map = client.read();
         for (id, messages) in map.iter_mut() {
             for message in messages.iter_mut() {
-                debug!("Received message: {:?}", message);
+                info!("Received message: {:?}", message);
             }
         }
         // Sleep 1 second

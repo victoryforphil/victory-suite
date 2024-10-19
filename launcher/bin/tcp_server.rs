@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use admin::admin_server::AdminServer;
-use datastore::time::VicDuration;
+use victory_time_rs::{ Timespan};
 use pubsub::{
     adapters::tcp::{TCPServerAdapter, TCPServerOptions},
     server::PubSubServer,
@@ -17,7 +17,7 @@ async fn main() {
     let server = TCPServerAdapter::new(TCPServerOptions {
         port: 7001,
         address: "0.0.0.0".to_string(),
-        update_interval: VicDuration::new_hz(50.0),
+        update_interval: Timespan::new_hz(50.0),
     });
 
     let mut pubsub = PubSubServer::new();

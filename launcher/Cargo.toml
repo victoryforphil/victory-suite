@@ -17,9 +17,10 @@ anyhow = "1.0.86"
 log = "0.4.22"
 thiserror = "1.0.63"
 tracing = "0.1.40"
-datastore = { path = "../datastore" }
 env_logger = "0.5.0"
 admin = { path = "../admin" }
 pubsub = { path = "../pubsub" }
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tokio-stream = "0.1.15"
+victory-data-store = { git = "https://github.com/victoryforphil/victory-data-store.git", version = "0.1.12" }
+victory-time-rs = { git = "https://github.com/victoryforphil/victory-time.git", version = "0.1.1" }

@@ -1,4 +1,4 @@
-use datastore::datapoints::DatapointMap;
+use victory_data_store::datapoints::DatapointMap;
 
 use crate::MutexType;
 
