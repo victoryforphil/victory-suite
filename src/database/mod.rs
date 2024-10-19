@@ -437,10 +437,6 @@ mod tests {
             .add_struct(&topic, time.clone(), test_struct.clone())
             .unwrap();
 
-        debug!(
-            "Datastore keys after add:\n {:#?}",
-            datastore.get_all_keys()
-        );
         // Log datastore keys
 
         let result: TestStruct = datastore.get_struct(&topic).unwrap();
