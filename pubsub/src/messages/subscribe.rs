@@ -1,5 +1,5 @@
 use super::PubSubMessage;
-use datastore::topics::TopicKey;
+use victory_data_store::topics::TopicKey;
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubscribeMessage {
@@ -29,7 +29,7 @@ impl From<PubSubMessage> for SubscribeMessage {
 
 #[cfg(test)]
 mod tests {
-    use datastore::topics::TopicKey;
+    use victory_data_store::topics::TopicKey;
 
     use super::SubscribeMessage;
 

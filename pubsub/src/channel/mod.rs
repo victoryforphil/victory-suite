@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use datastore::{
+use victory_data_store::{
     buckets::BucketHandle, database::Datastore, datapoints::Datapoint, topics::TopicKeyHandle,
 };
 use log::{debug, info};

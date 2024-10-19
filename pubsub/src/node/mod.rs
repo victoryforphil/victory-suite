@@ -1,11 +1,9 @@
 use std::collections::{BTreeMap, HashMap};
 
-use datastore::{
-    datapoints::{Datapoint, DatapointMap},
-    topics::{TopicKeyHandle, TopicKeyProvider},
-};
+
 use log::debug;
 use sub_callback::SubCallbackHandle;
+use victory_data_store::{datapoints::{Datapoint, DatapointMap}, topics::{TopicKeyHandle, TopicKeyProvider}};
 
 use crate::{
     adapters::{PubSubAdapter, PubSubAdapterHandle},
@@ -111,10 +109,10 @@ mod tests {
 
     use super::*;
 
-    use datastore::time::{VicInstant, VicTimecode};
-    use datastore::topics::TopicKey;
     use log::info;
     use tokio::sync::Mutex;
+    use victory_data_store::topics::TopicKey;
+    use victory_time_rs::Timepoint;
 
     use std::sync::mpsc::{channel, Sender};
     use std::sync::Arc;
@@ -153,7 +151,7 @@ mod tests {
         let callback = TestSubCallback { sender: tx };
         let datapoint = Datapoint::new(
             &topic.clone(),
-            VicInstant::new_secs(1.0).handle(),
+            Timepoint::new_secs(1.0),
             "test".into(),
         );
         node.publish_datapoint(&datapoint);
@@ -178,7 +176,7 @@ mod tests {
 
         let datapoint = Datapoint::new(
             &topic.clone(),
-            VicInstant::new(VicTimecode::new_secs(2.0)).handle(),
+            Timepoint::new_secs(2.0),
             "test".into(),
         );
         let message = UpdateMessage::new(datapoint.clone());

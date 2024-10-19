@@ -1,4 +1,4 @@
-use datastore::topics::TopicKeyHandle;
+use victory_data_store::topics::TopicKeyHandle;
 
 use crate::MutexType;
 

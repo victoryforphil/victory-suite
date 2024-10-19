@@ -3,7 +3,6 @@ use std::{
     sync::Arc,
 };
 
-use datastore::time::VicDuration;
 use log::{debug, error, info};
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -11,6 +10,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::warn;
+use victory_time_rs::Timespan;
 
 use crate::{
     adapters::{tcp::TCPPacket, PubSubAdapter},
@@ -21,7 +21,7 @@ use crate::{
 pub struct TCPServerOptions {
     pub port: u16,
     pub address: String,
-    pub update_interval: VicDuration,
+    pub update_interval: Timespan,
 }
 pub type TCPClientMapHandle = Arc<RwLock<BTreeMap<PubSubClientIDType, TcpStream>>>;
 
@@ -186,16 +186,13 @@ impl PubSubAdapter for TCPServerAdapter {
 mod tests {
     use super::*;
 
-
-
-
     #[tokio::test]
     async fn test_tcp_server() {
         pretty_env_logger::init();
         let options = TCPServerOptions {
             port: 8080,
             address: "0.0.0.0".to_string(),
-            update_interval: VicDuration::new_hz(50.0),
+            update_interval: Timespan::new_hz(50.0),
         };
         let adapter = TCPServerAdapter::new(options);
         assert_eq!(adapter.options.port, 8080);

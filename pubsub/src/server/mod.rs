@@ -2,7 +2,7 @@ pub mod config;
 
 use std::{collections::HashMap, sync::Arc};
 
-use datastore::{
+use victory_data_store::{
     database::Datastore,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };

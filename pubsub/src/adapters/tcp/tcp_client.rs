@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use log::{debug, info};
+use log::{debug, info, warn};
 use tokio::{net::TcpStream, sync::Mutex};
 
 use crate::{
@@ -60,15 +60,17 @@ impl PubSubAdapter for TCPClientAdapter {
         let mut buffer = vec![0; 1024];
         let stream = stream.try_lock().unwrap();
         match stream.try_read(&mut buffer) {
-            Ok(_) => {}
+            Ok(n) => {
+                buffer = buffer[..n].to_vec();
+            }
             Err(e) => {
-                //       warn!("Failed to read from stream: {:?}", e);
+             //   warn!("Failed to read from stream: {:?}", e);
                 return res;
             }
         };
 
         let packet: TCPPacket = bincode::deserialize(&buffer).unwrap();
-        debug!(
+        info!(
             "Received TCPPacket from client: {:?} with {} messages",
             id.to_string(),
             packet.messages.len()
