@@ -16,5 +16,5 @@ tokio = { version = "1.0", features = ["macros", "sync", "time", "net", "rt-mult
 rand = "0.8.5"
 serde = { version = "1.0.209", features = ["derive", "rc"] }
 bincode = "1.3.3"
-victory-data-store = { git = "https://github.com/victoryforphil/victory-data-store.git", version = "0.1.12" }
-victory-time-rs = { git = "https://github.com/victoryforphil/victory-time.git", version = "0.1.1" }
+victory-data-store = {workspace = true}
+victory-wtf = {workspace = true}

@@ -22,5 +22,5 @@ admin = { path = "../admin" }
 pubsub = { path = "../pubsub" }
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tokio-stream = "0.1.15"
-victory-data-store = { git = "https://github.com/victoryforphil/victory-data-store.git", version = "0.1.12" }
-victory-time-rs = { git = "https://github.com/victoryforphil/victory-time.git", version = "0.1.1" }
+victory-data-store = {workspace = true}
+victory-wtf = {workspace = true}
