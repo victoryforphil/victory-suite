@@ -1,2 +1,9 @@
+# Sub crate
+
 [workspace]
-members = ["admin", "launcher", "pubsub"]
+
+members = [
+    "admin",
+    "pubsub",
+    "launcher",
+]

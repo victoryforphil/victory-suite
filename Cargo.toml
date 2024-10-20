@@ -1,0 +1,4 @@
+[workspace]
+members = ["victory-commander", "victory-data-store", "victory-wtf"]
+
+exclude = ["victory-broker"]
