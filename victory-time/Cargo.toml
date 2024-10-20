@@ -1,5 +1,5 @@
 [package]
-name = "victory-time-rs"
+name = "victory-time"
 version = "0.1.1"
 edition = "2021"
 

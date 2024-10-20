@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-# victory-template
-Base for victory rust projects.
-=======
 # victory-time
 [![Rust](https://github.com/victoryforphil/victory-time/actions/workflows/rust-lib.yaml/badge.svg)](https://github.com/victoryforphil/victory-time/actions/workflows/rust-lib.yaml)
 
@@ -10,4 +6,3 @@ A very-skilled engineer once gave me solid advice to "never make your own time l
 
 
 Anyways, heres my own time library :) 
->>>>>>> victory-time/main
