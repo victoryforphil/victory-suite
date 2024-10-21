@@ -1,4 +1,6 @@
 
+use std::time::Duration;
+
 use log::{debug, info};
 use victory_data_store::database::{DataView, Datastore};
 use victory_wtf::{Timepoint, Timespan};
@@ -59,8 +61,12 @@ impl BasherSysRunner {
             }
             let end_time = Timepoint::now();
             let elapsed = end_time - start_time;
+
+            let sleep_time = self.dt.clone().secs() - elapsed.secs();
+            let sleep_duration = Duration::from_secs_f64(sleep_time);
+
             if self.real_time {
-                std::thread::sleep(elapsed.as_duration());
+                std::thread::sleep(sleep_duration);
             }
             self.current_time = self.current_time.clone() + self.dt.clone();
         }
