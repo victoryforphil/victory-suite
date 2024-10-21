@@ -112,7 +112,7 @@ mod tests {
     use log::info;
     use tokio::sync::Mutex;
     use victory_data_store::topics::TopicKey;
-    use victory_time_rs::Timepoint;
+    use victory_wtf::Timepoint;
 
     use std::sync::mpsc::{channel, Sender};
     use std::sync::Arc;

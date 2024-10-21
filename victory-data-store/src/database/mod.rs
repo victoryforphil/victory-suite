@@ -11,7 +11,7 @@ use log::trace;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
-use victory_time_rs::Timepoint;
+use victory_wtf::Timepoint;
 
 #[derive(Debug, Clone)]
 pub struct Datastore {

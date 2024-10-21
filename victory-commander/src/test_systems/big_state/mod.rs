@@ -47,7 +47,7 @@ mod tests {
 
     use big_pub::BigStatePublisher;
     use big_sub::BigStateSubscriber;
-    use victory_time_rs::{Timepoint, Timespan};
+    use victory_wtf::{Timepoint, Timespan};
 
     use crate::system::runner::BasherSysRunner;
 

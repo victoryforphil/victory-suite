@@ -3,7 +3,7 @@
 use super::PubSubMessage;
 use serde::{Deserialize, Serialize};
 use victory_data_store::{datapoints::Datapoint, primitives::Primitives, topics::{TopicKeyHandle, TopicKeyProvider}};
-use victory_time_rs::Timepoint;
+use victory_wtf::Timepoint;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublishMessage {
     pub topic: TopicKeyHandle,

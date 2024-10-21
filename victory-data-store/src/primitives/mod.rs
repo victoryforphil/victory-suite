@@ -1,6 +1,6 @@
 use ::serde::{Deserialize, Serialize};
 use blob::VicBlob;
-use victory_time_rs::{Timepoint, Timespan};
+use victory_wtf::{Timepoint, Timespan};
 
 use crate::topics::TopicIDType;
 

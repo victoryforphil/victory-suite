@@ -2,7 +2,7 @@
 use crate::system::System;
 use serde::{Deserialize, Serialize};
 use victory_data_store::{database::DataView, topics::TopicKey};
-use victory_time_rs::Timespan;
+use victory_wtf::Timespan;
 
 #[derive(Serialize, Deserialize)]
 pub struct TimeScaleData {

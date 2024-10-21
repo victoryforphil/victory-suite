@@ -10,7 +10,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::warn;
-use victory_time_rs::Timespan;
+use victory_wtf::Timespan;
 
 use crate::{
     adapters::{tcp::TCPPacket, PubSubAdapter},
