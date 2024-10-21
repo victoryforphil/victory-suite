@@ -4,7 +4,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use victory_time_rs::Timepoint;
+use victory_wtf::Timepoint;
 
 use crate::{
     primitives::Primitives,
@@ -33,7 +33,7 @@ impl Datapoint {
 
 #[cfg(test)]
 mod tests {
-    use victory_time_rs::Timepoint;
+    use victory_wtf::Timepoint;
 
     use crate::{
         datapoints::Datapoint,

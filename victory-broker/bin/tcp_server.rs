@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use admin::admin_server::AdminServer;
-use victory_time_rs::{ Timespan};
+use victory_wtf::{ Timespan};
 use pubsub::{
     adapters::tcp::{TCPServerAdapter, TCPServerOptions},
     server::PubSubServer,

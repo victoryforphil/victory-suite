@@ -4,7 +4,7 @@ use std::{
 };
 
 use log::{debug, trace};
-use victory_time_rs::Timepoint;
+use victory_wtf::Timepoint;
 
 use crate::{
     datapoints::Datapoint,
@@ -101,7 +101,7 @@ impl Bucket {
 #[cfg(test)]
 mod tests {
 
-    use victory_time_rs::{Timecode, Timepoint};
+    use victory_wtf::{Timecode, Timepoint};
 
     use crate::{
         buckets::Bucket,

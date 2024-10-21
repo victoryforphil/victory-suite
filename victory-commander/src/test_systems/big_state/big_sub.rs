@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use log::debug;
 use victory_data_store::database::{DataView, Datastore};
 use victory_data_store::topics::TopicKey;
-use victory_time_rs::{Timepoint, Timespan};
+use victory_wtf::{Timepoint, Timespan};
 
 use crate::system::System;
 use crate::test_systems::big_state::BigState;

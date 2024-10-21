@@ -1,4 +1,4 @@
-use victory_time_rs::{Timespan};
+use victory_wtf::{Timespan};
 
 #[derive(Debug, Clone)]
 pub struct PubSubServerConfig {

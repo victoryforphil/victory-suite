@@ -4,7 +4,7 @@ use log::info;
 use system::runner::BasherSysRunner;
 use test_systems::time_scale::{TimeScaleData, TimeScaleSystem};
 use victory_data_store::topics::TopicKey;
-use victory_time_rs::Timepoint;
+use victory_wtf::Timepoint;
 mod system;
 mod test_systems;
 

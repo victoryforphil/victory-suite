@@ -9,7 +9,7 @@ use victory_data_store::primitives::serde::deserializer::PrimitiveDeserializer;
 use victory_data_store::primitives::Primitives;
 use victory_data_store::topics::TopicKey;
 use victory_data_store::{primitives::serde::serialize::to_map, test_util::BigState};
-use victory_time_rs::Timepoint;
+use victory_wtf::Timepoint;
 
 #[global_allocator]
 static ALLOC: AllocProfiler = AllocProfiler::system();
