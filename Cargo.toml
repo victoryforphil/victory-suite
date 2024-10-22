@@ -1,4 +1,3 @@
 [workspace]
 members = ["victory-commander", "victory-data-store", "victory-wtf", "victory-broker"]
 
-exclude = ["victory-broker"]
