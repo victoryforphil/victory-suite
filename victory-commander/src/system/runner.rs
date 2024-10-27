@@ -1,4 +1,3 @@
-
 use std::time::Duration;
 
 use log::{debug, info, warn};
@@ -31,7 +30,7 @@ impl BasherSysRunner {
     pub fn add_system(&mut self, system: SystemHandle) {
         self.systems.push(system);
     }
-    
+
     pub fn set_real_time(&mut self, real_time: bool) {
         self.real_time = real_time;
     }
@@ -49,31 +48,29 @@ impl BasherSysRunner {
             for system in self.systems.iter_mut() {
                 let mut system = system.lock().unwrap();
                 let sub = system.get_subscribed_topics();
-                
-              
+
                 let mut inputs = DataView::new();
                 for topic in sub.iter() {
                     inputs = inputs.add_query(&self.data_store, topic).unwrap();
                 }
-           
+
                 let new_data = system.execute(&inputs, self.dt.clone());
                 self.data_store.apply_view(new_data).unwrap();
             }
             let end_time = Timepoint::now();
             let elapsed = end_time - start_time;
-            
 
             let sleep_time = self.dt.clone().secs() - elapsed.secs();
             if sleep_time < 0.0 {
                 warn!("System is taking too long to run! {:?}s", sleep_time);
-            }else{
+            } else {
                 let sleep_duration = Duration::from_secs_f64(sleep_time);
 
                 if self.real_time {
                     std::thread::sleep(sleep_duration);
                 }
             }
-           
+
             self.current_time = self.current_time.clone() + self.dt.clone();
         }
         info!("Finished running main loop");

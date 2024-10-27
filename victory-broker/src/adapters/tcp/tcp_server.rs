@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{Mutex, RwLock},
@@ -14,7 +14,7 @@ use victory_wtf::Timespan;
 
 use crate::{
     adapters::{tcp::TCPPacket, PubSubAdapter},
-    client::PubSubClientIDType,
+    channel::PubSubChannelIDType,
     messages::PubSubMessage,
 };
 #[derive(Debug, Clone)]
@@ -23,7 +23,7 @@ pub struct TCPServerOptions {
     pub address: String,
     pub update_interval: Timespan,
 }
-pub type TCPClientMapHandle = Arc<RwLock<BTreeMap<PubSubClientIDType, TcpStream>>>;
+pub type TCPClientMapHandle = Arc<RwLock<BTreeMap<PubSubChannelIDType, TcpStream>>>;
 
 struct ListenerAgent {
     options: TCPServerOptions,
@@ -72,9 +72,11 @@ impl ListenerAgent {
     async fn tick(&mut self) {
         let (stream, addr) = self.listener.accept().await.unwrap();
         debug!("New TCP Stream: {:?}", addr);
-        let id = rand::random::<PubSubClientIDType>();
-        self.clients_out.write().await.insert(id, stream);
-        info!("New client registered: {:?} from {:?}", id, addr);
+        {
+            let id = rand::random::<PubSubChannelIDType>();
+            self.clients_out.write().await.insert(id, stream);
+            debug!("New client registered: {:?} from {:?}", id, addr);
+        }
     }
 }
 
@@ -84,8 +86,6 @@ pub struct TCPServerAdapter {
     clients: TCPClientMapHandle,
     agent: JoinHandle<()>,
     options: TCPServerOptions,
-
-
 }
 
 impl TCPServerAdapter {
@@ -102,12 +102,8 @@ impl TCPServerAdapter {
 }
 
 impl PubSubAdapter for TCPServerAdapter {
-
     fn get_description(&self) -> String {
-        format!(
-            "tcp://{}:{}",
-            self.options.address, self.options.port
-        )
+        format!("tcp://{}:{}", self.options.address, self.options.port)
     }
 
     fn get_stats(&self) -> HashMap<String, String> {
@@ -118,9 +114,11 @@ impl PubSubAdapter for TCPServerAdapter {
         stats
     }
 
-
-    fn write(&mut self, to_send: HashMap<PubSubClientIDType, Vec<PubSubMessage>>) {
+    fn write(&mut self, to_send: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>) {
         let clients = self.clients.clone();
+        if to_send.is_empty() {
+            return;
+        }
 
         tokio::spawn(async move {
             debug!(
@@ -128,14 +126,16 @@ impl PubSubAdapter for TCPServerAdapter {
                 std::thread::current().id()
             );
             for (id, messages) in to_send {
-                let mut clients = clients.write().await;
-                let client = match clients.get_mut(&id) {
-                    Some(client) => client,
+                let clients = clients.write().await;
+
+                let client = match clients.first_key_value() {
+                    Some(client) => client.1,
                     None => {
                         warn!("TCP Stream not found for client id: {:?}", id);
                         continue;
                     }
                 };
+
                 let n_messages = messages.len();
                 let packet = TCPPacket {
                     from: 0,
@@ -143,36 +143,57 @@ impl PubSubAdapter for TCPServerAdapter {
                     messages,
                 };
                 let packet = bincode::serialize(&packet).unwrap();
-                let size = packet.len() as u32;
-                debug!(
-                    "Sending TCPPacket of size {} bytes, containing {} messages",
-                    size, n_messages
+
+                trace!(
+                    "Sending TCPPacket to client: {:?} with {} messages",
+                    id,
+                    n_messages
                 );
                 client.try_write(packet.as_slice()).unwrap();
             }
         });
     }
 
-    fn read(&mut self) -> HashMap<PubSubClientIDType, Vec<PubSubMessage>> {
+    fn read(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>> {
         let clients = self.clients.clone();
         let mut res = HashMap::new();
-        for (id, stream) in clients.try_write().unwrap().iter_mut() {
+        let mut client_write_lock = match clients.try_write() {
+            Ok(lock) => lock,
+            Err(e) => {
+                warn!("Failed to get write lock on clients: {:?}", e);
+                return res;
+            }
+        };
+        for (id, stream) in client_write_lock.iter_mut() {
             let mut buffer = vec![0; 1024];
             match stream.try_read(&mut buffer) {
-                Ok(_) => {}
+                Ok(n) => {
+                    buffer = buffer[..n].to_vec();
+                }
                 Err(e) => {
                     warn!("Failed to read from stream: {:?}", e);
                     continue;
                 }
             };
 
-            let packet: TCPPacket = bincode::deserialize(&buffer).unwrap();
+            let packet: TCPPacket = match bincode::deserialize(&buffer) {
+                Ok(packet) => packet,
+                Err(e) => {
+                    warn!("Failed to deserialize TCPPacket: {:?}", e);
+                    continue;
+                }
+            };
+
+            if packet.messages.is_empty() {
+                continue;
+            }
+            let id = packet.to;
             debug!(
                 "Received TCPPacket from client: {:?} with {} messages",
                 id,
                 packet.messages.len()
             );
-            res.insert(*id, packet.messages);
+            res.insert(id, packet.messages);
         }
         res
     }

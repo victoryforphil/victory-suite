@@ -1,4 +1,3 @@
-
 use crate::system::System;
 use serde::{Deserialize, Serialize};
 use victory_data_store::{database::DataView, topics::TopicKey};

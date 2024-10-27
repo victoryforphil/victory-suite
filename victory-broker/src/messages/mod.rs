@@ -2,21 +2,17 @@ mod health;
 mod publish;
 mod register;
 mod subscribe;
-mod update;
 pub use publish::*;
-pub use subscribe::*;
-pub use update::*;
-
 use serde::{Deserialize, Serialize};
+pub use subscribe::*;
 
-use crate::client::PubSubClientIDType;
+use crate::channel::PubSubChannelIDType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PubSubMessage {
     Register(),
     Publish(PublishMessage),
     Subscribe(SubscribeMessage),
-    Update(UpdateMessage),
     Health(),
-    Welcome(PubSubClientIDType),
+    Welcome(PubSubChannelIDType),
 }

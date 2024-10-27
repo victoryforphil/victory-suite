@@ -1,11 +1,15 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    io::{Read, Write},
+    net::TcpStream,
+    sync::{Arc, Mutex},
+};
 
-use log::{debug, info, warn};
-use tokio::{net::TcpStream, sync::Mutex};
+use log::{debug, info, trace, warn};
 
 use crate::{
     adapters::{tcp::TCPPacket, PubSubAdapter},
-    client::PubSubClientIDType,
+    channel::PubSubChannelIDType,
     messages::PubSubMessage,
 };
 
@@ -35,42 +39,46 @@ impl TCPClientOptions {
 pub struct TCPClientAdapter {
     options: TCPClientOptions,
     stream: Arc<Mutex<TcpStream>>,
-    id: Option<PubSubClientIDType>,
+    id: Option<PubSubChannelIDType>,
 }
 
 impl TCPClientAdapter {
-    pub async fn new(options: TCPClientOptions) -> TCPClientAdapter {
+    pub async fn new(
+        options: TCPClientOptions,
+    ) -> Result<TCPClientAdapter, Box<dyn std::error::Error>> {
         let url = options.to_url();
         info!("Connecting to: {}", url);
-        let stream = TcpStream::connect(url).await.unwrap();
-
-        TCPClientAdapter {
+        let stream = TcpStream::connect(url)?;
+        stream.set_nonblocking(true)?;
+        Ok(TCPClientAdapter {
             options,
             stream: Arc::new(Mutex::new(stream)),
             id: None,
-        }
+        })
     }
 }
 
 impl PubSubAdapter for TCPClientAdapter {
-    fn read(&mut self) -> HashMap<PubSubClientIDType, Vec<PubSubMessage>> {
+    fn read(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>> {
         let stream = self.stream.clone();
-        let id = self.id.unwrap_or(404);
+
         let mut res = HashMap::new();
         let mut buffer = vec![0; 1024];
-        let stream = stream.try_lock().unwrap();
-        match stream.try_read(&mut buffer) {
+        let mut stream = stream.lock().unwrap();
+
+        match stream.read(&mut buffer) {
             Ok(n) => {
                 buffer = buffer[..n].to_vec();
             }
             Err(e) => {
-             //   warn!("Failed to read from stream: {:?}", e);
+                warn!("Failed to read from stream: {:?}", e);
                 return res;
             }
         };
 
         let packet: TCPPacket = bincode::deserialize(&buffer).unwrap();
-        info!(
+        let id = packet.to;
+        trace!(
             "Received TCPPacket from client: {:?} with {} messages",
             id.to_string(),
             packet.messages.len()
@@ -79,28 +87,25 @@ impl PubSubAdapter for TCPClientAdapter {
         res
     }
 
-    fn write(&mut self, to_send: HashMap<PubSubClientIDType, Vec<PubSubMessage>>) {
+    fn write(&mut self, to_send: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>) {
         let stream = self.stream.clone();
-        let id = self.id.unwrap_or(404);
 
-        tokio::spawn(async move {
-            let stream = stream.lock().await;
-            for (_, messages) in to_send.iter() {
-                let n_messages = messages.len();
-                let packet = TCPPacket {
-                    from: id,
-                    to: 0,
-                    messages: messages.clone(),
-                };
-                let packet = bincode::serialize(&packet).unwrap();
-                let size = packet.len() as u32;
-                debug!(
-                    "Sending TCPPacket of size {} bytes, containing {} messages",
-                    size, n_messages
-                );
-                stream.try_write(packet.as_slice()).unwrap();
-            }
-        });
+        for (id, messages) in to_send.iter() {
+            let mut stream = stream.lock().unwrap();
+            let n_messages = messages.len();
+            let packet = TCPPacket {
+                from: *id,
+                to: *id,
+                messages: messages.clone(),
+            };
+            let packet = bincode::serialize(&packet).unwrap();
+            let size = packet.len() as u32;
+            debug!(
+                "Sending TCPPacket of size {} bytes, containing {} messages",
+                size, n_messages
+            );
+            stream.write(packet.as_slice()).unwrap();
+        }
     }
 
     fn get_name(&self) -> String {

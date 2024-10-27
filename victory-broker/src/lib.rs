@@ -1,13 +1,11 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 pub mod adapters;
 pub mod channel;
-pub mod client;
 pub mod messages;
 pub mod node;
-pub mod server;
 
 pub type MutexType<T> = Arc<Mutex<T>>;
 pub type RwLockType<T> = Arc<RwLock<T>>;

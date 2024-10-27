@@ -1,24 +1,33 @@
-use std::{collections::HashMap, sync::Arc};
-
-use victory_data_store::{
-    buckets::BucketHandle, database::Datastore, datapoints::Datapoint, topics::TopicKeyHandle,
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::{Arc, Mutex},
+    vec,
 };
-use log::{debug, info};
+
+use log::{debug, info, trace};
 use thiserror::Error;
+use victory_data_store::{
+    buckets::BucketHandle,
+    database::Datastore,
+    datapoints::Datapoint,
+    topics::{TopicKeyHandle, TopicKeyProvider},
+};
 
 use crate::{
-    client::{PubSubClientHandle, PubSubClientIDType},
-    messages::UpdateMessage,
+    messages::{PubSubMessage, PublishMessage, SubscribeMessage},
     MutexType,
 };
 
+pub type PubSubChannelIDType = u16;
+
 #[derive(Clone)]
 pub struct PubSubChannel {
-    pub topic: TopicKeyHandle,
-    pub bucket: BucketHandle,
-    pub publishers: Vec<PubSubClientHandle>,
-    pub subscribers: Vec<PubSubClientHandle>,
-    pub update_queue: HashMap<PubSubClientIDType, Vec<UpdateMessage>>,
+    pub id: PubSubChannelIDType,
+    pub publishing_topics: BTreeSet<TopicKeyHandle>,
+    pub subscribing_topics: BTreeSet<TopicKeyHandle>,
+
+    send_queue: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>,
+    recv_queue: Vec<Datapoint>,
 }
 
 pub type PubSubChannelHandle = MutexType<PubSubChannel>;
@@ -31,100 +40,150 @@ pub enum PubSubChannelError {
     CreateFailed,
 }
 impl PubSubChannel {
-    pub fn try_new(
-        topic: TopicKeyHandle,
-        datastore: &mut Datastore,
-    ) -> Result<Self, PubSubChannelError> {
-        debug!("Creating new PubSubChannel for topic: {}", topic);
-        let bucket = datastore.get_bucket(&topic);
+    pub fn new() -> Self {
+        let id = rand::random::<PubSubChannelIDType>();
 
-        let bucket = match bucket {
-            Ok(bucket) => Ok(bucket),
-            Err(_) => {
-                debug!("Bucket not found for topic: {}", topic);
-                datastore.create_bucket(&topic);
-                datastore.get_bucket(&topic)
-            }
+        info!("Created new PubSubChannel {}", id);
+        let mut channel = PubSubChannel {
+            id,
+            publishing_topics: BTreeSet::new(),
+            subscribing_topics: BTreeSet::new(),
+            send_queue: HashMap::new(),
+            recv_queue: Vec::new(),
         };
+        channel.send_welcome_message();
+        channel
+    }
 
-        if bucket.is_err() {
-            return Err(PubSubChannelError::CreateFailed);
-        }
-
-        info!("Created new PubSubChannel for topic: {}", topic);
-        Ok(PubSubChannel {
-            topic,
-            bucket: bucket.unwrap(),
-            publishers: Vec::new(),
-            subscribers: Vec::new(),
-            update_queue: HashMap::new(),
-        })
+    pub fn new_with_id(id: PubSubChannelIDType) -> Self {
+        info!("Created new PubSubChannel {}", id);
+        let mut channel = PubSubChannel {
+            id,
+            publishing_topics: BTreeSet::new(),
+            subscribing_topics: BTreeSet::new(),
+            send_queue: HashMap::new(),
+            recv_queue: Vec::new(),
+        };
+        channel
     }
     pub fn handle(&self) -> PubSubChannelHandle {
-        Arc::new(tokio::sync::Mutex::new(self.clone()))
-    }
-    pub fn add_publisher(&mut self, client: PubSubClientHandle) {
-        debug!(
-            "Adding publisher to PubSubChannel: {}",
-            client.try_lock().unwrap().id
-        );
-        self.publishers.push(client);
+        Arc::new(Mutex::new(self.clone()))
     }
 
-    pub fn on_publish(&mut self, datapoint: Vec<Datapoint>) {
-        debug!("Publishing message to PubSubChannel: {}", self.topic);
-        {
-            let mut bucket = self.bucket.write().unwrap();
-            for dp in datapoint {
-                bucket.add_datapoint(dp);
+    pub fn drain_send_queue(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>> {
+        self.send_queue.drain().collect()
+    }
+
+    pub fn drain_recv_queue(&mut self) -> Vec<Datapoint> {
+        self.recv_queue.drain(..).collect()
+    }
+
+    pub fn on_datapoint(&mut self, datapoint: &Datapoint) {
+        // Check to see if we shuld publish this topic
+        let topic = datapoint.topic.clone();
+
+        let mut publish = false;
+        for pub_topic in &self.publishing_topics {
+            if pub_topic.is_parent_of(&topic) {
+                publish = true;
+                break;
+            }
+
+            if topic.is_parent_of(pub_topic) {
+                publish = true;
+                break;
+            }
+
+            if topic == pub_topic.clone() {
+                publish = true;
+                break;
             }
         }
-        self.on_update();
-    }
-    pub fn get_queue_size(&self) -> usize {
-        let mut size = 0;
-        for (_, updates) in self.update_queue.iter() {
-            size += updates.len();
-        }
-        size
-    }
-
-    fn on_update(&mut self) {
-        debug!("Updating message to PubSubChannel: {}", self.topic);
-        let bucket = self.bucket.read().unwrap();
-
-        for sub in self.subscribers.iter() {
-            let value = bucket.get_latest_datapoint().unwrap();
-            let update = UpdateMessage::new(value.clone());
-            self.update_queue
-                .entry(sub.try_lock().unwrap().id)
-                .or_insert_with(Vec::new)
-                .push(update);
+        if publish {
+            debug!(
+                "Channel #{} publishing datapoint {:?}",
+                self.id, datapoint.topic
+            );
+            self.send_publish_message(datapoint.clone());
+        } else {
+            debug!(
+                "Channel #{} received datapoint {:?}, but is not publishing it",
+                self.id, datapoint.topic
+            );
         }
     }
 
-    pub fn get_updates(&mut self, client_id: PubSubClientIDType) -> Vec<UpdateMessage> {
-        debug!("Getting updates for PubSubChannel: {}", self.topic);
-        let updates = self.update_queue.remove(&client_id);
-        match updates {
-            Some(updates) => updates,
-            None => Vec::new(),
-        }
+    pub fn add_subscribe(&mut self, topic: TopicKeyHandle) {
+        info!("Channel #{} subscribing to topic {}", self.id, topic);
+        self.subscribing_topics.insert(topic.clone());
+        self.send_subscribe_message(topic.clone());
     }
 
-    pub fn add_subscriber(&mut self, client: PubSubClientHandle) {
-        debug!(
-            "Adding subscriber to PubSubChannel: {}",
-            client.try_lock().unwrap().id
+    pub fn on_publish(&mut self, datapoints: &Vec<Datapoint>) {
+        let mut new_datapoints = Vec::new();
+
+        for datapoint in datapoints {
+            let mut update_topic = false;
+            for sub_topic in &self.subscribing_topics {
+                if sub_topic.is_child_of(&datapoint.topic)
+                    || sub_topic == &datapoint.topic
+                    || datapoint.topic.is_child_of(sub_topic)
+                {
+                    update_topic = true;
+                    break;
+                }
+            }
+            if update_topic {
+                debug!(
+                    "Channel #{} received publish update for {:?}",
+                    self.id, datapoint.topic
+                );
+
+                new_datapoints.push(datapoint.clone());
+            }
+        }
+        self.recv_queue.append(&mut new_datapoints);
+    }
+
+    pub fn on_subscribe(&mut self, topic: TopicKeyHandle) {
+        info!(
+            "Channel #{} got subscribe, will publish: {:?}",
+            self.id, topic
         );
+        self.publishing_topics.insert(topic);
+    }
+}
 
-        client
-            .try_lock()
-            .unwrap()
-            .subscriptions
-            .push(self.topic.clone());
+impl PubSubChannel {
+    fn send_welcome_message(&mut self) {
+        let welcome_message = PubSubMessage::Welcome(self.id);
+        self.send_queue
+            .entry(self.id)
+            .or_insert(Vec::new())
+            .push(welcome_message);
+        debug!("Added welcome message to channel send queue {}", self.id);
+    }
 
-        self.subscribers.push(client);
+    fn send_publish_message(&mut self, datapoint: Datapoint) {
+        debug!(
+            "Channel #{} sending publish message for {:?}",
+            self.id, datapoint.topic
+        );
+        let publish_message = PubSubMessage::Publish(PublishMessage::single(datapoint));
+        self.send_queue
+            .entry(self.id)
+            .or_insert(Vec::new())
+            .push(publish_message);
+    }
+
+    fn send_subscribe_message(&mut self, topic: TopicKeyHandle) {
+        let subscribe_message = PubSubMessage::Subscribe(SubscribeMessage {
+            topic: topic.key().clone(),
+        });
+        self.send_queue
+            .entry(self.id)
+            .or_insert(Vec::new())
+            .push(subscribe_message);
     }
 }
 

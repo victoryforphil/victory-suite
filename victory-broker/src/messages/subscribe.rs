@@ -1,6 +1,6 @@
 use super::PubSubMessage;
-use victory_data_store::topics::TopicKey;
 use serde::{Deserialize, Serialize};
+use victory_data_store::topics::TopicKey;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubscribeMessage {
     pub topic: TopicKey,
