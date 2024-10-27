@@ -1,9 +1,11 @@
 use std::collections::{BTreeMap, HashMap};
 
-
 use log::debug;
 use sub_callback::SubCallbackHandle;
-use victory_data_store::{datapoints::{Datapoint, DatapointMap}, topics::{TopicKeyHandle, TopicKeyProvider}};
+use victory_data_store::{
+    datapoints::{Datapoint, DatapointMap},
+    topics::{TopicKeyHandle, TopicKeyProvider},
+};
 
 use crate::{
     adapters::{PubSubAdapter, PubSubAdapterHandle},
@@ -149,11 +151,7 @@ mod tests {
         let topic: TopicKey = "test/topic".into();
         let (tx, rx) = channel();
         let callback = TestSubCallback { sender: tx };
-        let datapoint = Datapoint::new(
-            &topic.clone(),
-            Timepoint::new_secs(1.0),
-            "test".into(),
-        );
+        let datapoint = Datapoint::new(&topic.clone(), Timepoint::new_secs(1.0), "test".into());
         node.publish_datapoint(&datapoint);
 
         node.tick();
@@ -174,11 +172,7 @@ mod tests {
         let callback = Arc::new(Mutex::new(callback));
         node.add_sub_callback(topic.handle().clone(), callback.clone());
 
-        let datapoint = Datapoint::new(
-            &topic.clone(),
-            Timepoint::new_secs(2.0),
-            "test".into(),
-        );
+        let datapoint = Datapoint::new(&topic.clone(), Timepoint::new_secs(2.0), "test".into());
         let message = UpdateMessage::new(datapoint.clone());
 
         {

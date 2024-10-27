@@ -1,8 +1,9 @@
 use std::{
     collections::BTreeMap,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 
+use listener::BucketListener;
 use log::{debug, trace};
 use victory_wtf::Timepoint;
 
@@ -11,11 +12,15 @@ use crate::{
     primitives::Primitives,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
+
+pub mod listener;
+
 #[derive(Debug)]
 /// A bucket is a collection of datapoints for a specific topic
 pub struct Bucket {
     pub topic: TopicKeyHandle,
     pub values: BTreeMap<Timepoint, Datapoint>,
+    listeners: Vec<Arc<Mutex<dyn BucketListener>>>,
 }
 
 pub type BucketHandle = Arc<RwLock<Bucket>>;
@@ -25,7 +30,13 @@ impl Bucket {
         Arc::new(RwLock::new(Bucket {
             topic: topic.handle(),
             values: BTreeMap::new(),
+            listeners: Vec::new(),
         }))
+    }
+
+    pub fn add_listener(&mut self, listener: Arc<Mutex<dyn BucketListener>>) {
+        debug!("Adding listener {:?}", listener);
+        self.listeners.push(listener);
     }
 
     pub fn add_primitive(&mut self, time: Timepoint, value: Primitives) {
@@ -40,6 +51,11 @@ impl Bucket {
 
     pub fn add_datapoint(&mut self, data_point: Datapoint) {
         trace!("Adding data point {:?}", data_point);
+
+        for listener in self.listeners.iter_mut() {
+            let mut listener = listener.lock().unwrap();
+            listener.on_datapoint(&data_point);
+        }
         self.values.insert(data_point.time.clone(), data_point);
     }
 
@@ -109,6 +125,8 @@ mod tests {
         primitives::Primitives,
         topics::{TopicKey, TopicKeyProvider},
     };
+
+    use super::listener::MockBucketListener;
 
     #[test]
     fn test_bucket_creation() {
@@ -204,5 +222,32 @@ mod tests {
                 "The value in the bucket is not the same as the test data"
             );
         }
+    }
+
+    #[test]
+    fn test_bucket_listeners() {
+        let topic_a = TopicKey::from_str("test/topic/a");
+        let topic_b = TopicKey::from_str("test/topic/b");
+        let bucket = Bucket::new(&topic_a);
+        let mut bucket = bucket.write().unwrap();
+
+        let listener = MockBucketListener::default().as_handle();
+        bucket.add_listener(listener.clone());
+
+        let time = Timepoint::new(Timecode::new_secs(1.0));
+        bucket.add_primitive(
+            time.clone(),
+            Primitives::Text("Test String value".to_string()),
+        );
+
+        let listener_a = listener.lock().unwrap().updates.pop().unwrap();
+        assert_eq!(listener_a.topic.key(), topic_a.key());
+        assert_eq!(listener_a.time, time);
+        assert_eq!(
+            listener_a.value,
+            Primitives::Text("Test String value".to_string())
+        );
+
+        // Write
     }
 }

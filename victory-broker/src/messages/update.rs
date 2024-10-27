@@ -1,7 +1,11 @@
 use super::PubSubMessage;
 
 use serde::{Deserialize, Serialize};
-use victory_data_store::{datapoints::Datapoint, primitives::Primitives, topics::{TopicKeyHandle, TopicKeyProvider}};
+use victory_data_store::{
+    datapoints::Datapoint,
+    primitives::Primitives,
+    topics::{TopicKeyHandle, TopicKeyProvider},
+};
 use victory_wtf::Timepoint;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateMessage {
@@ -17,11 +21,7 @@ impl UpdateMessage {
         }
     }
 
-    pub fn primitive<T: TopicKeyProvider>(
-        topic: &T,
-        time: Timepoint,
-        value: Primitives,
-    ) -> Self {
+    pub fn primitive<T: TopicKeyProvider>(topic: &T, time: Timepoint, value: Primitives) -> Self {
         UpdateMessage {
             topic: topic.handle(),
             messages: Datapoint::new(topic, time, value),

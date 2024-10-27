@@ -2,8 +2,8 @@ mod timecode;
 mod timepoint;
 mod timespan;
 pub use timecode::*;
-pub use timespan::*;
 pub use timepoint::*;
+pub use timespan::*;
 
 #[cfg(test)]
 mod tests_integration {

@@ -1,10 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
+use log::{debug, info};
+use thiserror::Error;
 use victory_data_store::{
     buckets::BucketHandle, database::Datastore, datapoints::Datapoint, topics::TopicKeyHandle,
 };
-use log::{debug, info};
-use thiserror::Error;
 
 use crate::{
     client::{PubSubClientHandle, PubSubClientIDType},

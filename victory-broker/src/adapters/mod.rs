@@ -3,7 +3,6 @@ pub mod tcp;
 
 use std::collections::HashMap;
 
-
 use crate::{client::PubSubClientIDType, messages::PubSubMessage, MutexType};
 
 pub trait PubSubAdapter {
