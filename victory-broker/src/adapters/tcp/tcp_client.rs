@@ -64,7 +64,7 @@ impl PubSubAdapter for TCPClientAdapter {
                 buffer = buffer[..n].to_vec();
             }
             Err(e) => {
-             //   warn!("Failed to read from stream: {:?}", e);
+                //   warn!("Failed to read from stream: {:?}", e);
                 return res;
             }
         };
