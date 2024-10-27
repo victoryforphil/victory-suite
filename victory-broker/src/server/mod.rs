@@ -2,11 +2,11 @@ pub mod config;
 
 use std::{collections::HashMap, sync::Arc};
 
+use log::{debug, info};
 use victory_data_store::{
     database::Datastore,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
-use log::{debug, info};
 
 use crate::{
     adapters::PubSubAdapterHandle,

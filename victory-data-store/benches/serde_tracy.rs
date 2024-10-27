@@ -15,7 +15,6 @@ use tracing_tracy::client::ProfiledAllocator;
 fn main() {
     // Run registered benchmarks.
 
-  
     divan::main();
 }
 
@@ -36,8 +35,6 @@ fn bench_to_map_rate(bencher: divan::Bencher) {
         .bench_refs(|s: &mut Vec<BigState>| to_map(s).unwrap());
 }
 
-
-
 #[divan::bench]
 fn bench_from_map_rate(bencher: divan::Bencher) {
     let len: usize = 100;
@@ -55,13 +52,12 @@ fn bench_from_map_rate(bencher: divan::Bencher) {
             ItemsCount::of_iter(s.iter())
         })
         .bench_refs(|s: &mut Vec<HashMap<Arc<TopicKey>, Primitives>>| {
-            s.iter().map(|m| {
-                let mut deserializer = PrimitiveDeserializer::new(&m);
-                let bs: BigState = Deserialize::deserialize(&mut deserializer).unwrap();
-                bs  
-            })
-            .collect::<Vec<BigState>>()
+            s.iter()
+                .map(|m| {
+                    let mut deserializer = PrimitiveDeserializer::new(&m);
+                    let bs: BigState = Deserialize::deserialize(&mut deserializer).unwrap();
+                    bs
+                })
+                .collect::<Vec<BigState>>()
         });
 }
-
-

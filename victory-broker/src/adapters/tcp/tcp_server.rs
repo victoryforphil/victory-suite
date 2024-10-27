@@ -84,8 +84,6 @@ pub struct TCPServerAdapter {
     clients: TCPClientMapHandle,
     agent: JoinHandle<()>,
     options: TCPServerOptions,
-
-
 }
 
 impl TCPServerAdapter {
@@ -102,12 +100,8 @@ impl TCPServerAdapter {
 }
 
 impl PubSubAdapter for TCPServerAdapter {
-
     fn get_description(&self) -> String {
-        format!(
-            "tcp://{}:{}",
-            self.options.address, self.options.port
-        )
+        format!("tcp://{}:{}", self.options.address, self.options.port)
     }
 
     fn get_stats(&self) -> HashMap<String, String> {
@@ -117,7 +111,6 @@ impl PubSubAdapter for TCPServerAdapter {
         stats.insert("n_clients".to_string(), n_clients.to_string());
         stats
     }
-
 
     fn write(&mut self, to_send: HashMap<PubSubClientIDType, Vec<PubSubMessage>>) {
         let clients = self.clients.clone();
