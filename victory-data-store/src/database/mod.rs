@@ -1,5 +1,5 @@
 use crate::{
-    buckets::{Bucket, BucketHandle},
+    buckets::{listener::BucketListener, Bucket, BucketHandle},
     datapoints::Datapoint,
     primitives::{
         serde::{deserializer::PrimitiveDeserializer, serialize::to_map},
@@ -7,9 +7,12 @@ use crate::{
     },
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
-use log::trace;
+use log::{debug, trace};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex},
+};
 use thiserror::Error;
 use victory_wtf::Timepoint;
 
@@ -34,6 +37,7 @@ impl DataView {
             maps: HashMap::new(),
         }
     }
+
     pub fn add_query(
         mut self,
         datastore: &Datastore,
@@ -51,6 +55,7 @@ impl DataView {
 
         Ok(self)
     }
+
     pub fn get_latest_map<T: TopicKeyProvider>(
         &self,
         topic: &T,
@@ -135,7 +140,22 @@ impl Datastore {
             buckets: HashMap::new(),
         }
     }
-
+    pub fn add_listener(
+        &mut self,
+        topic_query: &TopicKey,
+        listener: Arc<Mutex<dyn BucketListener>>,
+    ) -> Result<(), DatastoreError> {
+        let buckets = self.get_buckets_matching(topic_query)?;
+        for bucket in buckets {
+            debug!(
+                "Adding listener to bucket {:?}",
+                bucket.read().unwrap().topic.key()
+            );
+            let mut bucket = bucket.write().unwrap();
+            bucket.add_listener(listener.clone());
+        }
+        Ok(())
+    }
     pub fn apply_view(&mut self, view: DataView) -> Result<(), DatastoreError> {
         for (key, value) in view.maps {
             self.add_primitive(&key, Timepoint::now(), value);
@@ -324,7 +344,7 @@ impl Datastore {
 mod tests {
     use log::debug;
 
-    use crate::database::*;
+    use crate::{buckets::listener::MockBucketListener, database::*};
 
     #[test]
     pub fn test_datastore_creation() {
@@ -510,5 +530,29 @@ mod tests {
 
         let result: TestStructB = new_datastore.get_struct(&topic_b).unwrap();
         assert_eq!(result, test_struct_b);
+    }
+
+    #[test]
+    pub fn test_datastore_add_listener() {
+        let mut datastore = Datastore::new();
+        let topic_a = TopicKey::from_str("test/topic/a");
+        let topic_b = TopicKey::from_str("test/topic/b");
+        datastore.create_bucket(&topic_a);
+        datastore.create_bucket(&topic_b);
+
+        let listener = MockBucketListener::default().as_handle();
+        let broad_topic = TopicKey::from_str("test/topic");
+        datastore
+            .add_listener(&broad_topic, listener.clone())
+            .unwrap();
+
+        // Write value to bucker a and b
+        datastore.add_primitive(&topic_a, Timepoint::now(), 42.into());
+        datastore.add_primitive(&topic_b, Timepoint::now(), 42.into());
+
+        let updates = listener.lock().unwrap().updates.clone();
+        assert_eq!(updates.len(), 2);
+        assert_eq!(updates[0].topic.key(), topic_a.key());
+        assert_eq!(updates[1].topic.key(), topic_b.key());
     }
 }
