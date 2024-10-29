@@ -82,6 +82,7 @@ pub struct TCPServerAdapter {
     clients: TCPClientMapHandle,
     agent: JoinHandle<()>,
     options: TCPServerOptions,
+    buffer: Vec<u8>,
 }
 
 impl TCPServerAdapter {
@@ -93,6 +94,7 @@ impl TCPServerAdapter {
             agent,
             clients,
             options,
+            buffer: vec![0; 1024],
         }
     }
 }
@@ -154,18 +156,18 @@ impl PubSubAdapter for TCPServerAdapter {
             }
         };
         for (id, stream) in client_write_lock.iter_mut() {
-            let mut buffer = vec![0; 1024];
-            match stream.read(&mut buffer) {
+            
+          
+            match stream.read(&mut self.buffer) {
                 Ok(n) => {
-                    buffer = buffer[..n].to_vec();
+                
                 }
                 Err(e) => {
-                    warn!("Failed to read from stream: {:?}", e);
                     continue;
                 }
             };
 
-            let packet: TCPPacket = match bincode::deserialize(&buffer) {
+            let packet: TCPPacket = match bincode::deserialize(&self.buffer) {
                 Ok(packet) => packet,
                 Err(e) => {
                     warn!("Failed to deserialize TCPPacket: {:?}", e);
