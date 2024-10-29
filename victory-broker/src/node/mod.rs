@@ -99,7 +99,14 @@ impl Node {
         for (_, channel) in self.channels.iter_mut() {
             let mut channel = channel.lock().unwrap();
             let send_queue = channel.drain_send_queue();
-            self.adapter.lock().unwrap().write(send_queue);
+
+            for (channel_id, messages) in send_queue {
+                // Chunk messages into 8
+                let mut chunks = messages.chunks(8);
+                while let Some(chunk) = chunks.next() {
+                    self.adapter.lock().unwrap().write(HashMap::from([(channel_id, chunk.to_vec())]));
+                }
+            }
         }
     }
 }
