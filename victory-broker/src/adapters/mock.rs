@@ -2,13 +2,13 @@ use std::collections::HashMap;
 
 use log::debug;
 
-use crate::{client::PubSubClientIDType, messages::PubSubMessage};
+use crate::{channel::PubSubChannelIDType, messages::PubSubMessage};
 
 use super::PubSubAdapter;
 
 pub struct MockPubSubAdapter {
-    read_buffer: HashMap<PubSubClientIDType, Vec<PubSubMessage>>,
-    write_buffer: HashMap<PubSubClientIDType, Vec<PubSubMessage>>,
+    read_buffer: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>,
+    write_buffer: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>,
 }
 
 impl MockPubSubAdapter {
@@ -18,36 +18,36 @@ impl MockPubSubAdapter {
             write_buffer: HashMap::new(),
         }
     }
-    pub fn client_ids(&self) -> Vec<PubSubClientIDType> {
+    pub fn channel_ids(&self) -> Vec<PubSubChannelIDType> {
         self.write_buffer.keys().cloned().collect()
     }
-    pub fn client_read(&mut self, client_id: PubSubClientIDType) -> Vec<PubSubMessage> {
+    pub fn channel_read(&mut self, channel_id: PubSubChannelIDType) -> Vec<PubSubMessage> {
         self.write_buffer
-            .remove(&client_id)
+            .remove(&channel_id)
             .unwrap_or_else(Vec::new)
     }
 
-    pub fn client_write(&mut self, client_id: PubSubClientIDType, messages: Vec<PubSubMessage>) {
+    pub fn channel_write(&mut self, channel_id: PubSubChannelIDType, messages: Vec<PubSubMessage>) {
         self.read_buffer
-            .entry(client_id)
+            .entry(channel_id)
             .or_insert_with(Vec::new)
             .extend(messages);
     }
 }
 
 impl PubSubAdapter for MockPubSubAdapter {
-    fn read(&mut self) -> HashMap<PubSubClientIDType, Vec<PubSubMessage>> {
+    fn read(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>> {
         // Drain read the buffer
         let mut buffer = HashMap::new();
         std::mem::swap(&mut self.read_buffer, &mut buffer);
         buffer
     }
 
-    fn write(&mut self, to_send: HashMap<PubSubClientIDType, Vec<PubSubMessage>>) {
+    fn write(&mut self, to_send: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>) {
         debug!("MockPubSubAdapter::write: {:?}", to_send.len());
-        for (client_id, messages) in to_send {
+        for (channel_id, messages) in to_send {
             self.write_buffer
-                .entry(client_id)
+                .entry(channel_id)
                 .or_insert_with(Vec::new)
                 .extend(messages);
         }

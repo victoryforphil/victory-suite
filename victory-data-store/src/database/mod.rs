@@ -7,7 +7,7 @@ use crate::{
     },
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
-use log::{debug, trace};
+use log::{debug, trace, warn};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -15,6 +15,8 @@ use std::{
 };
 use thiserror::Error;
 use victory_wtf::Timepoint;
+
+pub type DatastoreHandle = Arc<Mutex<Datastore>>;
 
 #[derive(Debug, Clone)]
 pub struct Datastore {
@@ -140,12 +142,30 @@ impl Datastore {
             buckets: HashMap::new(),
         }
     }
+
+    pub fn handle(self) -> DatastoreHandle {
+        Arc::new(Mutex::new(self))
+    }
     pub fn add_listener(
         &mut self,
         topic_query: &TopicKey,
         listener: Arc<Mutex<dyn BucketListener>>,
     ) -> Result<(), DatastoreError> {
         let buckets = self.get_buckets_matching(topic_query)?;
+        if buckets.len() == 0 {
+            warn!(
+                "No buckets found for topic when adding listener {:?}",
+                topic_query
+            );
+            // Make a new bucket
+            self.create_bucket(topic_query);
+        }
+
+        let buckets = self.get_buckets_matching(topic_query)?;
+        if buckets.len() == 0 {
+            return Err(DatastoreError::BucketNotFound(topic_query.clone()));
+        }
+
         for bucket in buckets {
             debug!(
                 "Adding listener to bucket {:?}",
@@ -165,6 +185,7 @@ impl Datastore {
 
     pub fn create_bucket<T: TopicKeyProvider>(&mut self, topic: &T) {
         if !self.buckets.contains_key(&topic.handle()) {
+            debug!("Creating new bucket for topic {:?}", topic.key());
             let bucket = Bucket::new(topic);
             self.buckets.insert(topic.handle().clone(), bucket);
         }
@@ -284,6 +305,12 @@ impl Datastore {
         let bucket = self.buckets.get_mut(&topic).unwrap();
 
         bucket.write().unwrap().add_primitive(time, value);
+    }
+
+    pub fn add_datapoints(&mut self, datapoints: Vec<Datapoint>) {
+        for datapoint in datapoints {
+            self.add_primitive(&datapoint.topic, datapoint.time, datapoint.value);
+        }
     }
 
     pub fn get_latest_primitive<T: TopicKeyProvider>(&self, topic: &T) -> Option<Primitives> {
