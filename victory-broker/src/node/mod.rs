@@ -95,19 +95,12 @@ impl Node {
         self.apply_datapoints(&msgs);
         self.notify_sub_callbacks(&msgs);
 
-        // 5. Send outgoing messages to adapters
-        let outgoing_messages = {
-            let mut channel_map = HashMap::new();
-            for (_, channel) in self.channels.iter_mut() {
-                let mut channel = channel.lock().unwrap();
-                let send_queue = channel.drain_send_queue();
-                for (channel_id, messages) in send_queue {
-                    channel_map.entry(channel_id).or_insert(Vec::new()).extend(messages);
-                }
-            }
-            channel_map
-        };
-        self.adapter.lock().unwrap().write(outgoing_messages);
+
+        for (_, channel) in self.channels.iter_mut() {
+            let mut channel = channel.lock().unwrap();
+            let send_queue = channel.drain_send_queue();
+            self.adapter.lock().unwrap().write(send_queue);
+        }
     }
 }
 
