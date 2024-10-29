@@ -51,7 +51,7 @@ impl ListenerAgent {
                     return;
                 }
             };
-
+      
             let mut agent = ListenerAgent {
                 options: options.clone(),
                 listener,
@@ -66,6 +66,7 @@ impl ListenerAgent {
 
     fn tick(&mut self) {
         let (stream, addr) = self.listener.accept().unwrap();
+        stream.set_nonblocking(true).unwrap();
         debug!("New TCP Stream: {:?}", addr);
         {
             let id = rand::random::<PubSubChannelIDType>();
