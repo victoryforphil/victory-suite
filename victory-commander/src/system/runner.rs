@@ -53,6 +53,11 @@ impl BasherSysRunner {
         }
         info!("Running main loop for {:?}s", self.end_time.secs());
         while self.current_time < self.end_time {
+
+            if let Some(node) = &mut self.pubsub_node {
+                node.tick();
+            }
+
             let start_time = Timepoint::now();
             for system in self.systems.iter_mut() {
                 let mut system = system.lock().unwrap();
@@ -68,7 +73,9 @@ impl BasherSysRunner {
             }
             let end_time = Timepoint::now();
             let elapsed = end_time - start_time;
-
+            if let Some(node) = &mut self.pubsub_node {
+                node.tick();
+            }
             let sleep_time = self.dt.clone().secs() - elapsed.secs();
             if sleep_time < 0.0 {
                 warn!("System is taking too long to run! {:?}s", sleep_time);
@@ -81,6 +88,7 @@ impl BasherSysRunner {
             }
 
             self.current_time = self.current_time.clone() + self.dt.clone();
+            
         }
         info!("Finished running main loop");
     }
