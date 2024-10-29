@@ -7,7 +7,7 @@ use crate::{
     },
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
-use log::{debug, trace, warn};
+use log::{debug, info, trace, warn};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -21,6 +21,7 @@ pub type DatastoreHandle = Arc<Mutex<Datastore>>;
 #[derive(Debug, Clone)]
 pub struct Datastore {
     buckets: HashMap<TopicKeyHandle, BucketHandle>,
+    listeners: HashMap<TopicKeyHandle, Vec<Arc<Mutex<dyn BucketListener>>>>,
 }
 #[derive(Debug, Clone)]
 pub struct DataView {
@@ -139,6 +140,7 @@ impl Default for Datastore {
 impl Datastore {
     pub fn new() -> Datastore {
         Datastore {
+            listeners: HashMap::new(),
             buckets: HashMap::new(),
         }
     }
@@ -146,24 +148,32 @@ impl Datastore {
     pub fn handle(self) -> DatastoreHandle {
         Arc::new(Mutex::new(self))
     }
+
+    pub fn get_existing_listeners(&self, topic: &TopicKey) -> Vec<Arc<Mutex<dyn BucketListener>>> {
+        self.buckets
+            .get(&topic.handle())
+            .unwrap()
+            .read()
+            .unwrap()
+            .listeners
+            .clone()
+    }
+
     pub fn add_listener(
         &mut self,
         topic_query: &TopicKey,
         listener: Arc<Mutex<dyn BucketListener>>,
     ) -> Result<(), DatastoreError> {
+        self.listeners
+            .entry(topic_query.handle())
+            .or_insert_with(Vec::new)
+            .push(listener.clone());
         let buckets = self.get_buckets_matching(topic_query)?;
         if buckets.len() == 0 {
             warn!(
                 "No buckets found for topic when adding listener {:?}",
                 topic_query
             );
-            // Make a new bucket
-            self.create_bucket(topic_query);
-        }
-
-        let buckets = self.get_buckets_matching(topic_query)?;
-        if buckets.len() == 0 {
-            return Err(DatastoreError::BucketNotFound(topic_query.clone()));
         }
 
         for bucket in buckets {
@@ -187,6 +197,15 @@ impl Datastore {
         if !self.buckets.contains_key(&topic.handle()) {
             debug!("Creating new bucket for topic {:?}", topic.key());
             let bucket = Bucket::new(topic);
+            // Check to see if any of the listens could apply to this bucket
+            let listeners = self.listeners.clone();
+            for (key, listeners) in listeners {
+                if key.key().is_child_of(topic.key()) || key.key() == topic.key() || topic.key().is_child_of(key.key()) {
+                    for listener in listeners {
+                        bucket.write().unwrap().add_listener(listener.clone());
+                    }
+                }
+            }
             self.buckets.insert(topic.handle().clone(), bucket);
         }
     }
@@ -278,8 +297,6 @@ impl Datastore {
         let value_map = to_map(&value)
             .map_err(|e| DatastoreError::Generic(format!("Error serializing struct: {:?}", e)))?;
 
-        trace!("[add_struct] Value map: {:#?}", value_map);
-
         for (key, value) in value_map {
             let full_key = key.add_prefix(topic.key().to_owned());
             // Remove the leading slash
@@ -296,11 +313,7 @@ impl Datastore {
     ) {
         let topic = topic.handle();
         let time = time.clone();
-
-        if !self.buckets.contains_key(&topic) {
-            let bucket = Bucket::new(&topic);
-            self.buckets.insert(topic.clone(), bucket);
-        }
+        self.create_bucket(&topic);
 
         let bucket = self.buckets.get_mut(&topic).unwrap();
 

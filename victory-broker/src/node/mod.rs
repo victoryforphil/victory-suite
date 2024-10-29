@@ -95,24 +95,19 @@ impl Node {
         self.apply_datapoints(&msgs);
         self.notify_sub_callbacks(&msgs);
 
-        // 5. Send outgoing messages to adapters
-        let outgoing_messages = {
-            let mut channel_map = HashMap::new();
-            for (_, channel) in self.channels.iter_mut() {
-                let mut channel = channel.lock().unwrap();
-                let send_queue = channel.drain_send_queue();
-                if send_queue.len() > 0 {
-                    debug!(
-                        "Channel #{} sending {} messages",
-                        channel.id,
-                        send_queue.len()
-                    );
+
+        for (_, channel) in self.channels.iter_mut() {
+            let mut channel = channel.lock().unwrap();
+            let send_queue = channel.drain_send_queue();
+
+            for (channel_id, messages) in send_queue {
+                // Chunk messages into 8
+                let mut chunks = messages.chunks(16);
+                while let Some(chunk) = chunks.next() {
+                    self.adapter.lock().unwrap().write(HashMap::from([(channel_id, chunk.to_vec())]));
                 }
-                channel_map.extend(send_queue);
             }
-            channel_map
-        };
-        self.adapter.lock().unwrap().write(outgoing_messages);
+        }
     }
 }
 

@@ -1603,6 +1603,7 @@ dependencies = [
  "pretty_env_logger 0.5.0",
  "rand",
  "serde",
+ "serde_json",
  "test-log",
  "thiserror",
  "tokio",

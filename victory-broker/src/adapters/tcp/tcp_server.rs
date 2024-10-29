@@ -1,8 +1,13 @@
 use std::{
-    collections::{BTreeMap, HashMap}, io::{Read, Write}, net::{TcpListener, TcpStream}, sync::{Arc, Mutex}, thread::{self, JoinHandle}
+    collections::{BTreeMap, HashMap},
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
+    sync::{Arc, Mutex},
+    thread::{self, JoinHandle},
 };
 
 use log::{debug, error, info, trace};
+
 
 use tracing::warn;
 use victory_wtf::Timespan;
@@ -36,7 +41,7 @@ impl ListenerAgent {
             std::thread::current().id(),
             options
         );
-        thread::spawn( move || {
+        thread::spawn(move || {
             debug!(
                 "ListenerAgent new thread: {:?}",
                 std::thread::current().id()
@@ -51,7 +56,7 @@ impl ListenerAgent {
                     return;
                 }
             };
-      
+
             let mut agent = ListenerAgent {
                 options: options.clone(),
                 listener,
@@ -95,7 +100,7 @@ impl TCPServerAdapter {
             agent,
             clients,
             options,
-            buffer: vec![0; 1024],
+            buffer: vec![0; 2048],
         }
     }
 }
@@ -118,39 +123,37 @@ impl PubSubAdapter for TCPServerAdapter {
         if to_send.is_empty() {
             return;
         }
-
+      
         for (id, messages) in to_send {
-           
-           // Divide messages into chunks of 4
-           let mut chunks = messages.chunks(4);
-           while let Some(chunk) = chunks.next() {
-           let packet = TCPPacket {
-                from: 0,
-                to: id,
+            // Divide messages into chunks of 4
+            let mut chunks = messages.chunks(32);
+            while let Some(chunk) = chunks.next() {
+                let packet = TCPPacket {
+                    from: 0,
+                    to: id,
                     messages: chunk.to_vec(),
-            };
-            let packet = bincode::serialize(&packet).unwrap();
-            trace!(
-                "Sending TCPPacket to client: {:?} with {} messages",
-                id,
-                chunk.len()
-            );
-            let clients = clients.lock().unwrap();
-            let mut client = match clients.first_key_value() {
+                };
+                
+                let clients = clients.lock().unwrap();
+                let mut client = match clients.first_key_value() {
                     Some(client) => client.1,
                     None => {
                         warn!("TCP Stream not found for client id: {:?}", id);
                         continue;
-                }
-            };
-            match client.write(packet.as_slice()) {
-                Ok(_) => (),
-                Err(e) => {
-                    error!("Failed to write to client: {:?}", e);
-                    // Remove client
-                    self.clients.lock().unwrap().remove(&id);
+                    }
+                };
+                client.set_nonblocking(false).unwrap();
+                match bincode::serialize_into(&mut client, &packet) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        error!("Failed to write to client: {:?}", e);
+                        // Remove client
+                        client.set_nonblocking(true);
+                        client.shutdown(std::net::Shutdown::Both);
+                        self.clients.lock().unwrap().remove(&id);
                     }
                 }
+                client.set_nonblocking(true).unwrap();
             }
         }
     }
@@ -165,22 +168,12 @@ impl PubSubAdapter for TCPServerAdapter {
                 return res;
             }
         };
-        for (id, stream) in client_write_lock.iter_mut() {
-            
-          
-            match stream.read(&mut self.buffer) {
-                Ok(n) => {
-                
-                }
-                Err(e) => {
-                    continue;
-                }
-            };
-
-            let packet: TCPPacket = match bincode::deserialize(&self.buffer) {
+        for (_id, stream) in client_write_lock.iter_mut() {
+           
+            let packet: TCPPacket = match bincode::deserialize_from(&mut *stream) {
                 Ok(packet) => packet,
                 Err(e) => {
-                    warn!("Failed to deserialize TCPPacket: {:?}", e);
+                  
                     continue;
                 }
             };

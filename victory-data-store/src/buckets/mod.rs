@@ -20,7 +20,7 @@ pub mod listener;
 pub struct Bucket {
     pub topic: TopicKeyHandle,
     pub values: BTreeMap<Timepoint, Datapoint>,
-    listeners: Vec<Arc<Mutex<dyn BucketListener>>>,
+    pub listeners: Vec<Arc<Mutex<dyn BucketListener>>>,
 }
 
 pub type BucketHandle = Arc<RwLock<Bucket>>;
@@ -57,9 +57,11 @@ impl Bucket {
 
     pub fn add_datapoint(&mut self, data_point: Datapoint) {
         trace!("Adding datapoint: {}", self.topic);
+       
         for listener in self.listeners.iter_mut() {
-            let mut listener = listener.lock().unwrap();
+  
             debug!("Notifying listener: {:?}", listener);
+            let mut listener = listener.lock().unwrap();
             listener.on_datapoint(&data_point);
         }
         self.values.insert(data_point.time.clone(), data_point);
