@@ -51,7 +51,7 @@ impl ListenerAgent {
                     return;
                 }
             };
-
+      
             let mut agent = ListenerAgent {
                 options: options.clone(),
                 listener,
@@ -66,6 +66,7 @@ impl ListenerAgent {
 
     fn tick(&mut self) {
         let (stream, addr) = self.listener.accept().unwrap();
+        stream.set_nonblocking(true).unwrap();
         debug!("New TCP Stream: {:?}", addr);
         {
             let id = rand::random::<PubSubChannelIDType>();
@@ -81,6 +82,7 @@ pub struct TCPServerAdapter {
     clients: TCPClientMapHandle,
     agent: JoinHandle<()>,
     options: TCPServerOptions,
+    buffer: Vec<u8>,
 }
 
 impl TCPServerAdapter {
@@ -92,6 +94,7 @@ impl TCPServerAdapter {
             agent,
             clients,
             options,
+            buffer: vec![0; 1024],
         }
     }
 }
@@ -115,38 +118,38 @@ impl PubSubAdapter for TCPServerAdapter {
             return;
         }
 
-        thread::spawn(move || {
-            debug!(
-                "Spawned new TCP write task: {:?}",
-                std::thread::current().id()
+        for (id, messages) in to_send {
+           
+           
+            let n_messages = messages.len();
+            let packet = TCPPacket {
+                from: 0,
+                to: id,
+                messages,
+            };
+            let packet = bincode::serialize(&packet).unwrap();
+            trace!(
+                "Sending TCPPacket to client: {:?} with {} messages",
+                id,
+                n_messages
             );
-            for (id, messages) in to_send {
-                let clients = clients.lock().unwrap();
-
-                let mut client = match clients.first_key_value() {
-                    Some(client) => client.1,
-                    None => {
-                        warn!("TCP Stream not found for client id: {:?}", id);
-                        continue;
-                    }
-                };
-
-                let n_messages = messages.len();
-                let packet = TCPPacket {
-                    from: 0,
-                    to: id,
-                    messages,
-                };
-                let packet = bincode::serialize(&packet).unwrap();
-
-                trace!(
-                    "Sending TCPPacket to client: {:?} with {} messages",
-                    id,
-                    n_messages
-                );
-                client.write(packet.as_slice()).unwrap();
+            let clients = clients.lock().unwrap();
+            let mut client = match clients.first_key_value() {
+                Some(client) => client.1,
+                None => {
+                    warn!("TCP Stream not found for client id: {:?}", id);
+                    continue;
+                }
+            };
+            match client.write(packet.as_slice()) {
+                Ok(_) => (),
+                Err(e) => {
+                    error!("Failed to write to client: {:?}", e);
+                    // Remove client
+                    self.clients.lock().unwrap().remove(&id);
+                }
             }
-        });
+        }
     }
 
     fn read(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>> {
@@ -160,18 +163,18 @@ impl PubSubAdapter for TCPServerAdapter {
             }
         };
         for (id, stream) in client_write_lock.iter_mut() {
-            let mut buffer = vec![0; 1024];
-            match stream.read(&mut buffer) {
+            
+          
+            match stream.read(&mut self.buffer) {
                 Ok(n) => {
-                    buffer = buffer[..n].to_vec();
+                
                 }
                 Err(e) => {
-                    warn!("Failed to read from stream: {:?}", e);
                     continue;
                 }
             };
 
-            let packet: TCPPacket = match bincode::deserialize(&buffer) {
+            let packet: TCPPacket = match bincode::deserialize(&self.buffer) {
                 Ok(packet) => packet,
                 Err(e) => {
                     warn!("Failed to deserialize TCPPacket: {:?}", e);

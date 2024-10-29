@@ -36,6 +36,12 @@ impl Bucket {
 
     pub fn add_listener(&mut self, listener: Arc<Mutex<dyn BucketListener>>) {
         debug!("Adding listener {:?}", listener.lock().unwrap());
+      
+        // Notify listener of latest datapoint
+        if let Some(datapoint) = self.get_latest_datapoint() {
+            let mut listener = listener.lock().unwrap();
+            listener.on_datapoint(datapoint);
+        }
         self.listeners.push(listener);
     }
 

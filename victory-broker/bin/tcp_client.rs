@@ -29,7 +29,7 @@ fn main() {
     let mut node = Node::new("TCP Client".to_string(), client_handle, datastore.clone());
     node.register();
     loop {
-        thread::sleep(Duration::from_secs_f32(0.25));
+        thread::sleep(Duration::from_secs_f32(0.01));
         node.tick();
         datastore.lock().unwrap().add_primitive(
             &topic_key,
