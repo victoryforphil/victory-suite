@@ -35,7 +35,7 @@ impl Bucket {
     }
 
     pub fn add_listener(&mut self, listener: Arc<Mutex<dyn BucketListener>>) {
-        debug!("Adding listener {:?}", listener);
+        debug!("Adding listener {:?}", listener.lock().unwrap());
         self.listeners.push(listener);
     }
 
@@ -50,10 +50,10 @@ impl Bucket {
     }
 
     pub fn add_datapoint(&mut self, data_point: Datapoint) {
-        trace!("Adding data point {:?}", data_point);
-
+        trace!("Adding datapoint: {}", self.topic);
         for listener in self.listeners.iter_mut() {
             let mut listener = listener.lock().unwrap();
+            debug!("Notifying listener: {:?}", listener);
             listener.on_datapoint(&data_point);
         }
         self.values.insert(data_point.time.clone(), data_point);

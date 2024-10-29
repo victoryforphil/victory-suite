@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use victory_data_store::datapoints::DatapointMap;
 
 use crate::MutexType;

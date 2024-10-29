@@ -1,195 +1,460 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::{Arc, Mutex},
+};
 
-use log::debug;
+use bucket_listener::NodeBucketListener;
+use log::{debug, info, trace};
 use sub_callback::SubCallbackHandle;
 use victory_data_store::{
+    buckets::listener::BucketListener,
+    database::{Datastore, DatastoreHandle},
     datapoints::{Datapoint, DatapointMap},
+    primitives::Primitives,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
+use victory_wtf::Timepoint;
 
 use crate::{
     adapters::{PubSubAdapter, PubSubAdapterHandle},
-    client::PubSubClientIDType,
+    channel::{PubSubChannel, PubSubChannelHandle, PubSubChannelIDType},
     messages::{PubSubMessage, PublishMessage},
 };
+pub mod bucket_listener;
 pub mod sub_callback;
-
 pub struct Node {
-    pub id: PubSubClientIDType,
     pub name: String,
     pub adapter: PubSubAdapterHandle,
+    pub datastore: DatastoreHandle,
     pub sub_callbacks: BTreeMap<TopicKeyHandle, SubCallbackHandle>,
-    publish_queue: Vec<PublishMessage>,
+    pub channels: HashMap<PubSubChannelIDType, PubSubChannelHandle>,
+    pub bucket_listener: Arc<Mutex<NodeBucketListener>>,
 }
 
 impl Node {
-    pub fn new(id: PubSubClientIDType, name: String, adapter: PubSubAdapterHandle) -> Self {
-        debug!(
-            "Node::new: Creating new node with id {} and name {}",
-            id, name
-        );
+    pub fn new(name: String, adapter: PubSubAdapterHandle, datastore: DatastoreHandle) -> Self {
+        debug!("Node::new: Creating new node with name {}", name);
+        let bucket_listener = Arc::new(Mutex::new(NodeBucketListener::new()));
         Node {
-            id,
             name,
             adapter,
+            datastore,
             sub_callbacks: BTreeMap::new(),
-            publish_queue: Vec::new(),
+            channels: HashMap::new(),
+            bucket_listener,
         }
     }
-
+    pub fn register(&mut self) {
+        let register_message = PubSubMessage::Register();
+        self.send_message(0, register_message);
+    }
     pub fn add_sub_callback<T: TopicKeyProvider>(&mut self, topic: T, callback: SubCallbackHandle) {
-        debug!(
-            "Node::add_sub_callback: Adding callback for topic {:?}",
-            topic.key()
-        );
+        debug!("Adding callback for topic {:?}", topic.key());
+
         self.sub_callbacks.insert(topic.handle(), callback);
-    }
 
-    pub fn publish_message(&mut self, message: PublishMessage) {
-        debug!("Node::publish_message: Publishing message {:?}", message);
-        self.publish_queue.push(message);
-    }
-
-    pub fn publish_datapoint(&mut self, datapoint: &Datapoint) {
-        let message = PublishMessage::new(&datapoint.topic, vec![datapoint.clone()]);
-        self.publish_message(message);
+        for channel in self.channels.values_mut() {
+            let mut channel = channel.lock().unwrap();
+            channel.add_subscribe(topic.handle());
+        }
     }
 
     pub fn tick(&mut self) {
-        let mut adapter = self.adapter.try_lock().unwrap();
+        // 1. Read incoming messages from adapters
+        let msgs = {
+            let mut adapter = self.adapter.lock().unwrap();
+            adapter.read()
+        };
+        self.process_incoming_messages(msgs);
 
-        let mut sub_map: DatapointMap = BTreeMap::new();
-        let read_message = adapter.read();
-        let read_message: Vec<&PubSubMessage> =
-            read_message.iter().map(|(_, v)| v).flatten().collect();
-        debug!("Node::tick: Read {} messages", read_message.len());
-        for msg in read_message.iter() {
-            match msg {
-                PubSubMessage::Update(message) => {
-                    sub_map.insert(message.topic.clone(), message.messages.clone());
+        // 2. Check for local datastore updates and send to remote channels
+        let datapoints = {
+            let mut bucket_listener = self.bucket_listener.lock().unwrap();
+            bucket_listener.drain()
+        };
+        if datapoints.len() > 0 {
+            debug!("Sending {} datapoints to remote channels", datapoints.len());
+        }
+        for datapoint in datapoints {
+            self.on_datapoint(&datapoint);
+        }
+
+        // 4. Check for recived datapoints from remote channels
+        let mut msgs = Vec::new();
+        for channel in self.channels.values_mut() {
+            let mut channel = channel.lock().unwrap();
+            msgs.extend(channel.drain_recv_queue());
+        }
+        if msgs.len() > 0 {
+            debug!(
+                "Applying and notifying {} datapoints from remote channels",
+                msgs.len()
+            );
+        }
+
+        self.apply_datapoints(&msgs);
+        self.notify_sub_callbacks(&msgs);
+
+        // 5. Send outgoing messages to adapters
+        let outgoing_messages = {
+            let mut channel_map = HashMap::new();
+            for (_, channel) in self.channels.iter_mut() {
+                let mut channel = channel.lock().unwrap();
+                let send_queue = channel.drain_send_queue();
+                if send_queue.len() > 0 {
+                    debug!(
+                        "Channel #{} sending {} messages",
+                        channel.id,
+                        send_queue.len()
+                    );
                 }
-                _ => {}
+                channel_map.extend(send_queue);
+            }
+            channel_map
+        };
+        self.adapter.lock().unwrap().write(outgoing_messages);
+    }
+}
+
+impl Node {
+    fn process_incoming_messages(
+        &mut self,
+        msgs: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>,
+    ) {
+        for (channel_id, messages) in msgs {
+            for message in messages {
+                debug!("Processing incoming message: {:?}", message);
+                self.process_incoming_message(channel_id, message);
             }
         }
+    }
+    fn process_incoming_message(
+        &mut self,
+        channel_id: PubSubChannelIDType,
+        message: PubSubMessage,
+    ) {
+        match message {
+            PubSubMessage::Register() => {
+                debug!("[process_incoming_message]: Received register message for channel");
 
-        for (topic, datapoint) in sub_map.iter() {
-            if let Some(callback) = self.sub_callbacks.get(topic) {
-                let mut callback = callback.try_lock().unwrap();
-                callback.on_update(&sub_map);
+                let new_channel = self.new_channel();
+                // Update with current subscribing topics
+                for topic in self.sub_callbacks.keys() {
+                    debug!("Re-adding topic subscription {:?} to new channel", topic);
+                    let mut new_channel = new_channel.lock().unwrap();
+                    new_channel.add_subscribe(topic.clone());
+                }
             }
-        }
-
-        debug!(
-            "Node::tick: Publishing {} messages",
-            self.publish_queue.len()
-        );
-        for message in self.publish_queue.drain(..) {
-            let mut to_send = HashMap::new();
-            for datapoint in message.messages.iter() {
-                let topic = datapoint.topic.clone();
-                to_send.insert(
-                    self.id,
-                    vec![PubSubMessage::Publish(PublishMessage::new(
-                        &topic,
-                        vec![datapoint.clone()],
-                    ))],
-                );
+            PubSubMessage::Publish(msg) => {
+                let datapoints = msg.messages;
+                self.on_publish(channel_id, &datapoints);
             }
-            adapter.write(to_send);
+            PubSubMessage::Subscribe(msg) => {
+                self.on_subscribe(channel_id, msg.topic.handle());
+            }
+            PubSubMessage::Welcome(id) => {
+                debug!("Received welcome message for channel {}", id);
+                let new_channel = self.new_channel_with_id(id);
+                // Update with current subscribing topics
+                for topic in self.sub_callbacks.keys() {
+                    let mut new_channel = new_channel.lock().unwrap();
+                    new_channel.add_subscribe(topic.clone());
+                }
+            }
+            _ => {}
         }
     }
 
-    pub fn get_queue_len(&self) -> usize {
-        self.publish_queue.len()
+    fn send_message(&mut self, channel_id: PubSubChannelIDType, message: PubSubMessage) {
+        let mut adapter = self.adapter.try_lock().unwrap();
+        let mut msg_map = HashMap::new();
+        msg_map.insert(channel_id, vec![message]);
+        adapter.write(msg_map);
+    }
+
+    fn new_channel(&mut self) -> PubSubChannelHandle {
+        let channel = PubSubChannel::new();
+        let handle = channel.handle();
+        let id = channel.id;
+        debug!("[new_channel]: Created new channel with id {}", id);
+        self.channels.insert(id, handle.clone());
+        handle
+    }
+
+    fn new_channel_with_id(&mut self, id: PubSubChannelIDType) -> PubSubChannelHandle {
+        let channel = PubSubChannel::new_with_id(id);
+        let handle = channel.handle();
+        self.channels.insert(id, handle.clone());
+        handle
+    }
+
+    fn on_subscribe(&mut self, channel_id: PubSubChannelIDType, topic: TopicKeyHandle) {
+        trace!(
+            "New remote subscription {:?} on channel {}",
+            topic,
+            channel_id
+        );
+        let channel = self.channels.get_mut(&channel_id).unwrap();
+        let mut channel = channel.lock().unwrap();
+        let mut datastore = self.datastore.lock().unwrap();
+        datastore
+            .add_listener(topic.key(), self.bucket_listener.clone())
+            .expect("Failed to add listener");
+        channel.on_subscribe(topic);
+    }
+
+    fn on_datapoint(&mut self, datapoint: &Datapoint) {
+        trace!("Received updated datapoint: {:?}", datapoint.topic);
+        for channel in self.channels.values_mut() {
+            let mut channel = channel.lock().unwrap();
+            channel.on_datapoint(datapoint);
+        }
+    }
+
+    fn on_publish(&mut self, channel_id: PubSubChannelIDType, datapoints: &Vec<Datapoint>) {
+        trace!("Received publish message for channel {}", channel_id);
+        let channel = self.channels.get_mut(&channel_id).unwrap();
+        let mut channel = channel.lock().unwrap();
+        channel.on_publish(datapoints);
+    }
+
+    fn apply_datapoints(&mut self, datapoints: &Vec<Datapoint>) {
+        if datapoints.len() > 0 {
+            debug!("Applying {} datapoints", datapoints.len());
+            self.datastore
+                .lock()
+                .unwrap()
+                .add_datapoints(datapoints.clone());
+        }
+    }
+
+    fn notify_sub_callbacks(&mut self, datapoints: &Vec<Datapoint>) {
+        // Call all sub callbacks
+
+        if datapoints.len() == 0 {
+            return;
+        }
+        for (topic, callback) in self.sub_callbacks.iter() {
+            let mut update_map = BTreeMap::new();
+
+            for datapoint in datapoints {
+                if datapoint.topic.is_child_of(topic) {
+                    update_map.insert(datapoint.topic.clone(), datapoint.clone());
+                } else {
+                    debug!(
+                        "Datapoint {:?} is not a child of topic {:?}",
+                        datapoint.topic, topic
+                    );
+                }
+            }
+            if update_map.len() > 0 {
+                let mut callback = callback.lock().unwrap();
+                callback.on_update(&update_map);
+                debug!("Notified sub callback for topic {:?}", topic);
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::adapters::mock::MockPubSubAdapter;
-    use crate::messages::UpdateMessage;
+    use crate::messages::SubscribeMessage;
+    use test_log::test;
+    use victory_data_store::primitives::Primitives;
 
     use super::*;
 
     use log::info;
-    use tokio::sync::Mutex;
+
     use victory_data_store::topics::TopicKey;
     use victory_wtf::Timepoint;
 
+    use std::ops::Sub;
     use std::sync::mpsc::{channel, Sender};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use std::vec;
-
+    #[derive(Debug, Default)]
     struct TestSubCallback {
-        sender: Sender<DatapointMap>,
+        msgs: Vec<DatapointMap>,
     }
 
     impl sub_callback::SubCallback for TestSubCallback {
         fn on_update(&mut self, datapoints: &DatapointMap) {
             info!("TestSubCallback::on_update: Received {:?}", datapoints);
-            self.sender.send(datapoints.clone()).unwrap();
+            self.msgs.push(datapoints.clone());
         }
     }
 
     #[test]
-    fn test_node_new() {
+    fn test_node_register() {
+        let datastore = Arc::new(Mutex::new(Datastore::new()));
         let adapter = Arc::new(Mutex::new(MockPubSubAdapter::new()));
-        let node = Node::new(1, "test".to_string(), adapter);
-        assert_eq!(node.id, 1);
-        assert_eq!(node.name, "test");
-        assert_eq!(node.sub_callbacks.len(), 0);
-        assert_eq!(node.get_queue_len(), 0);
+        let mut node = Node::new("test".to_string(), adapter.clone(), datastore.clone());
+
+        // Send register message
+
+        {
+            let register_message = PubSubMessage::Register();
+            let mut adapter = adapter.lock().unwrap();
+            adapter.channel_write(0, vec![register_message]);
+        }
+
+        // Process incoming messages
+        node.tick();
+
+        // Check that the channel was created
+        let channels = node.channels;
+        assert!(channels.len() == 1, "1 New channel was created");
+    }
+
+    #[test]
+    fn test_node_remote_subscribe() {
+        let datastore = Arc::new(Mutex::new(Datastore::new()));
+        let adapter = Arc::new(Mutex::new(MockPubSubAdapter::new()));
+        let mut node = Node::new("test".to_string(), adapter.clone(), datastore.clone());
+
+        // Send register message
+        {
+            let register_message = PubSubMessage::Register();
+            let mut adapter = adapter.lock().unwrap();
+            adapter.channel_write(0, vec![register_message]);
+        }
+        // Process incoming messages
+        node.tick();
+
+        // Check that the channel was created
+        let channels = node.channels.clone();
+        assert!(channels.len() == 1, "1 New channel was created");
+        let channel = channels.values().next().unwrap();
+        {
+            let channel = channel.lock().unwrap();
+            let recv_msgs = adapter.lock().unwrap().channel_read(channel.id);
+            assert!(recv_msgs.len() == 1, "1 Welcome message was received");
+        }
+
+        // Send Subscribe message
+        {
+            let topic = TopicKey::from_str("test");
+            let subscribe_message = PubSubMessage::Subscribe(SubscribeMessage::new(topic));
+            let mut adapter = adapter.lock().unwrap();
+            let channel = channel.lock().unwrap();
+            adapter.channel_write(channel.id, vec![subscribe_message]);
+        }
+
+        // Process incoming messages
+        node.tick();
+
+        {
+            let channel = channel.lock().unwrap();
+            let topic = TopicKey::from_str("test");
+            // Check that the topic is subscribed to
+            assert!(
+                channel.publishing_topics.contains(&topic),
+                "Topic is subscribed to, {:?}",
+                channel.subscribing_topics
+            );
+        }
+
+        // Publish a datapoint
+        {
+            let topic = TopicKey::from_str("test");
+            datastore
+                .lock()
+                .unwrap()
+                .add_primitive(&topic, Timepoint::now(), Primitives::from(1));
+        }
+
+        // Process incoming messages
+        node.tick();
+
+        // Check that the channel received the datapoint
+        {
+            let topic = TopicKey::from_str("test");
+            let channel = channel.lock().unwrap();
+            let recv_msgs = adapter.lock().unwrap().channel_read(channel.id);
+            assert!(
+                recv_msgs.len() == 1,
+                "1 Datapoint was received, {:?}",
+                recv_msgs
+            );
+
+            let datapoint = recv_msgs.first().unwrap();
+            let publish_message = match datapoint {
+                PubSubMessage::Publish(msg) => msg,
+                _ => panic!("Expected publish message"),
+            };
+            let datapoint = publish_message.messages.first().unwrap();
+            assert_eq!(
+                datapoint.topic,
+                topic.handle(),
+                "Datapoint topic is correct"
+            );
+            assert_eq!(
+                datapoint.value,
+                Primitives::from(1),
+                "Datapoint value is correct"
+            );
+        }
     }
 
     #[test]
     fn test_node_publish() {
-        pretty_env_logger::init();
+        let topic = TopicKey::from_str("test");
+        let datastore = Arc::new(Mutex::new(Datastore::new()));
         let adapter = Arc::new(Mutex::new(MockPubSubAdapter::new()));
-        let mut node = Node::new(1, "test".to_string(), adapter.clone());
+        let mut node = Node::new("test".to_string(), adapter.clone(), datastore.clone());
 
-        let topic: TopicKey = "test/topic".into();
-        let (tx, rx) = channel();
-        let callback = TestSubCallback { sender: tx };
-        let datapoint = Datapoint::new(&topic.clone(), Timepoint::new_secs(1.0), "test".into());
-        node.publish_datapoint(&datapoint);
-
+        // Send register message
+        {
+            let register_message = PubSubMessage::Register();
+            let mut adapter = adapter.lock().unwrap();
+            adapter.channel_write(0, vec![register_message]);
+        }
+        // Process incoming messages
         node.tick();
-        let mut adapter = adapter.try_lock().unwrap();
-        let read_result = adapter.client_read(1);
-        info!("Clients read: {:?}", adapter.client_ids());
-        assert_eq!(read_result.len(), 1);
-    }
 
-    #[test]
-    fn test_node_sub_callback() {
-        let adapter = Arc::new(Mutex::new(MockPubSubAdapter::new()));
-        let mut node = Node::new(1, "test".to_string(), adapter.clone());
-
-        let topic = TopicKey::from_str("test/topic");
-        let (tx, rx) = channel();
-        let callback = TestSubCallback { sender: tx };
-        let callback = Arc::new(Mutex::new(callback));
-        node.add_sub_callback(topic.handle().clone(), callback.clone());
-
-        let datapoint = Datapoint::new(&topic.clone(), Timepoint::new_secs(2.0), "test".into());
-        let message = UpdateMessage::new(datapoint.clone());
-
+        // Check that the channel was created
+        let channels = node.channels.clone();
+        assert!(channels.len() == 1, "1 New channel was created");
+        let channel = channels.values().next().unwrap();
         {
-            adapter
-                .try_lock()
-                .unwrap()
-                .client_write(1, vec![PubSubMessage::Update(message.clone())]);
+            let channel = channel.lock().unwrap();
+            let recv_msgs = adapter.lock().unwrap().channel_read(channel.id);
+            assert!(recv_msgs.len() == 1, "1 Welcome message was received");
         }
 
+        // Locally subscribe to topic
+        let sub_callback = TestSubCallback::default();
+        let sub_callback_handle = Arc::new(Mutex::new(sub_callback));
+        node.add_sub_callback(topic.clone(), sub_callback_handle.clone());
+
+        // Publish a datapoint remotely
         {
-            node.tick();
+            let datapoint = Datapoint::new(&topic, Timepoint::now(), Primitives::from(1));
+            let publish_message = PublishMessage::single(datapoint);
+            let publish_message = PubSubMessage::Publish(publish_message);
+            let mut adapter = adapter.lock().unwrap();
+            let channel = channel.lock().unwrap();
+            adapter.channel_write(channel.id, vec![publish_message]);
         }
-        {
-            let read_result = adapter.try_lock().unwrap().client_read(1);
-            assert_eq!(read_result.len(), 0);
-            let received = rx.try_recv().unwrap();
-            assert_eq!(received.len(), 1);
-        }
+
+        // Process incoming messages
+        node.tick();
+
+        // Check that the sub callback received the datapoint
+        let sub_callback = sub_callback_handle.lock().unwrap();
+        assert!(sub_callback.msgs.len() == 1, "1 Datapoint was received");
+        let datapoints = sub_callback.msgs.first().unwrap();
+        let mut values = datapoints.values();
+        assert!(values.len() == 1, "1 Datapoint was received");
+        let value = values.next().unwrap();
+        assert_eq!(
+            value.value,
+            Primitives::from(1),
+            "Datapoint value is correct"
+        );
+        assert_eq!(value.topic, topic.handle(), "Datapoint topic is correct");
     }
 }

@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use log::debug;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -209,7 +210,7 @@ impl TopicKey {
 
     #[instrument(skip_all)]
     pub fn is_child_of(&self, parent: &TopicKey) -> bool {
-        if self.sections.len() <= parent.sections.len() {
+        if self.sections.len() < parent.sections.len() {
             return false;
         }
 
@@ -224,6 +225,9 @@ impl TopicKey {
 
     #[instrument(skip_all)]
     pub fn is_parent_of(&self, child: &TopicKey) -> bool {
+        if self == child {
+            return true;
+        }
         child.is_child_of(self)
     }
 

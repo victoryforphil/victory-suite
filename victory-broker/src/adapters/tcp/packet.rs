@@ -1,9 +1,9 @@
-use crate::{client::PubSubClientIDType, messages::PubSubMessage};
+use crate::{channel::PubSubChannelIDType, messages::PubSubMessage};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TCPPacket {
-    pub from: PubSubClientIDType,
-    pub to: PubSubClientIDType,
+    pub from: PubSubChannelIDType,
+    pub to: PubSubChannelIDType,
     pub messages: Vec<PubSubMessage>,
 }
