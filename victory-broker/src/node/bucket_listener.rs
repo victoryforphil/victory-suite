@@ -26,4 +26,8 @@ impl NodeBucketListener {
     pub fn drain(&mut self) -> Vec<Datapoint> {
         self.msgs.drain(..).collect()
     }
+
+    pub fn get_n_latest(&mut self, n: usize) -> Vec<Datapoint> {
+        self.msgs.drain(..n).collect()
+    }
 }
