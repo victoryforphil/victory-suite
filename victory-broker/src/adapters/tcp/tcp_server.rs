@@ -116,38 +116,31 @@ impl PubSubAdapter for TCPServerAdapter {
             return;
         }
 
-        thread::spawn(move || {
-            debug!(
-                "Spawned new TCP write task: {:?}",
-                std::thread::current().id()
+        for (id, messages) in to_send {
+           
+           
+            let n_messages = messages.len();
+            let packet = TCPPacket {
+                from: 0,
+                to: id,
+                messages,
+            };
+            let packet = bincode::serialize(&packet).unwrap();
+            trace!(
+                "Sending TCPPacket to client: {:?} with {} messages",
+                id,
+                n_messages
             );
-            for (id, messages) in to_send {
-                let clients = clients.lock().unwrap();
-
-                let mut client = match clients.first_key_value() {
-                    Some(client) => client.1,
-                    None => {
-                        warn!("TCP Stream not found for client id: {:?}", id);
-                        continue;
-                    }
-                };
-
-                let n_messages = messages.len();
-                let packet = TCPPacket {
-                    from: 0,
-                    to: id,
-                    messages,
-                };
-                let packet = bincode::serialize(&packet).unwrap();
-
-                trace!(
-                    "Sending TCPPacket to client: {:?} with {} messages",
-                    id,
-                    n_messages
-                );
-                client.write(packet.as_slice()).unwrap();
-            }
-        });
+            let clients = clients.lock().unwrap();
+            let mut client = match clients.first_key_value() {
+                Some(client) => client.1,
+                None => {
+                    warn!("TCP Stream not found for client id: {:?}", id);
+                    continue;
+                }
+            };
+            client.write(packet.as_slice()).unwrap();
+        }
     }
 
     fn read(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>> {

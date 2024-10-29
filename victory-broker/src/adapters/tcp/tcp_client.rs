@@ -65,13 +65,13 @@ impl PubSubAdapter for TCPClientAdapter {
         let mut res = HashMap::new();
         let mut buffer = vec![0; 1024];
         let mut stream = stream.lock().unwrap();
-
+        
         match stream.read(&mut buffer) {
             Ok(n) => {
-                buffer = buffer[..n].to_vec();
+              
             }
             Err(e) => {
-                warn!("Failed to read from stream: {:?}", e);
+               // warn!("Failed to read from stream: {:?}", e);
                 return res;
             }
         };
