@@ -13,7 +13,7 @@ pub fn main() {
     info!("Hello from victory-commander!");
     let key = TopicKey::from_str("time_data");
     let mut runner = BasherSysRunner::new();
-    runner.data_store.add_struct(
+    runner.data_store.lock().unwrap().add_struct(
         &key.clone(),
         Timepoint::now(),
         TimeScaleData { test_value: 10.0 },
@@ -24,9 +24,9 @@ pub fn main() {
 
     runner.run(Timepoint::new_secs(1000.0));
 
-    for key in runner.data_store.get_all_keys() {
+    for key in runner.data_store.lock().unwrap().get_all_keys() {
         info!("Key: {:?}", key);
-        let latest = runner.data_store.get_latest_primitive(&key).unwrap();
+        let latest = runner.data_store.lock().unwrap().get_latest_primitive(&key).unwrap();
         info!("Latest: {:?}", latest);
     }
 }
