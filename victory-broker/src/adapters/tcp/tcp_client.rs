@@ -43,7 +43,7 @@ pub struct TCPClientAdapter {
 }
 
 impl TCPClientAdapter {
-    pub async fn new(
+    pub fn new(
         options: TCPClientOptions,
     ) -> Result<TCPClientAdapter, Box<dyn std::error::Error>> {
         let url = options.to_url();
