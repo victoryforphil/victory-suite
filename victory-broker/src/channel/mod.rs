@@ -71,13 +71,11 @@ impl PubSubChannel {
     }
 
     pub fn drain_send_queue(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>> {
-        // Drain 16 messages from each channel's inner vector, leaving the rest intact in self
-        let mut send_queue: HashMap<PubSubChannelIDType, Vec<PubSubMessage>> =
-            self.send_queue.drain().collect();
-        for (_, messages) in send_queue.iter_mut() {
-            messages.truncate(8);
+        let mut to_send = HashMap::new();
+        for (channel_id, messages) in self.send_queue.iter_mut() {
+            to_send.insert(*channel_id, messages.drain(..16).collect());
         }
-        send_queue
+        to_send
     }
 
     pub fn drain_recv_queue(&mut self) -> Vec<Datapoint> {

@@ -69,9 +69,9 @@ impl PubSubAdapter for TCPClientAdapter {
         let mut stream = stream.lock().unwrap();
         
         let mut last_read = 0;
+        // reset buffer
+        self.buffer.fill(0);
 
-
-        
         match stream.read(&mut self.buffer) {
             Ok(n) => {
                last_read = n;
