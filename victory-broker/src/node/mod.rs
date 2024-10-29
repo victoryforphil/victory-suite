@@ -102,7 +102,7 @@ impl Node {
 
             for (channel_id, messages) in send_queue {
                 // Chunk messages into 8
-                let mut chunks = messages.chunks(8);
+                let mut chunks = messages.chunks(4);
                 while let Some(chunk) = chunks.next() {
                     self.adapter.lock().unwrap().write(HashMap::from([(channel_id, chunk.to_vec())]));
                 }
