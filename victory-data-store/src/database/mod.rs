@@ -320,6 +320,18 @@ impl Datastore {
             .and_then(|b| b.read().unwrap().get_latest_value().cloned())
     }
 
+    pub fn get_latest_datapoints<T: TopicKeyProvider>(
+        &self,
+        topic_query: &T,
+    ) -> Result<Vec<Datapoint>, DatastoreError> {
+        let buckets = self.get_buckets_matching(topic_query)?;
+        let datapoints = buckets
+            .iter()
+            .filter_map(|b| b.read().unwrap().get_latest_datapoint().cloned())
+            .collect();
+        Ok(datapoints)
+    }
+
     pub fn get_latest_primitives<T: TopicKeyProvider>(
         &self,
         topics: HashSet<T>,

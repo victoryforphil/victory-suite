@@ -194,13 +194,26 @@ impl Node {
             topic,
             channel_id
         );
-        let channel = self.channels.get_mut(&channel_id).unwrap();
-        let mut channel = channel.lock().unwrap();
-        let mut datastore = self.datastore.lock().unwrap();
-        datastore
-            .add_listener(topic.key(), self.bucket_listener.clone())
-            .expect("Failed to add listener");
-        channel.on_subscribe(topic);
+      
+        {
+            let mut datastore = self.datastore.lock().unwrap();
+            let channel = self.channels.get_mut(&channel_id).unwrap();
+            let mut channel = channel.lock().unwrap();
+           
+            datastore
+                .add_listener(topic.key(), self.bucket_listener.clone())
+                .expect("Failed to add listener");
+            channel.on_subscribe(topic.clone());
+        }
+
+        // Send initial snapshot of all topics
+        let datapoints = {
+            let datastore = self.datastore.lock().unwrap();
+            datastore.get_latest_datapoints(&topic).unwrap()
+        };
+        for datapoint in datapoints {
+            self.on_datapoint(&datapoint);
+        }
     }
 
     fn on_datapoint(&mut self, datapoint: &Datapoint) {
