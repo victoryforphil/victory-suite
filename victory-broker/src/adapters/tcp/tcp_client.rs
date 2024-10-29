@@ -40,6 +40,7 @@ pub struct TCPClientAdapter {
     options: TCPClientOptions,
     stream: Arc<Mutex<TcpStream>>,
     id: Option<PubSubChannelIDType>,
+    buffer: Vec<u8>,
 }
 
 impl TCPClientAdapter {
@@ -50,10 +51,12 @@ impl TCPClientAdapter {
         info!("Connecting to: {}", url);
         let stream = TcpStream::connect(url)?;
         stream.set_nonblocking(true)?;
+        stream.set_nodelay(true)?;
         Ok(TCPClientAdapter {
             options,
             stream: Arc::new(Mutex::new(stream)),
             id: None,
+            buffer: vec![0; 4096],
         })
     }
 }
@@ -63,12 +66,13 @@ impl PubSubAdapter for TCPClientAdapter {
         let stream = self.stream.clone();
 
         let mut res = HashMap::new();
-        let mut buffer = vec![0; 1024];
         let mut stream = stream.lock().unwrap();
         
         let mut last_read = 0;
+
+
         
-        match stream.read(&mut buffer) {
+        match stream.read(&mut self.buffer) {
             Ok(n) => {
                last_read = n;
             }
@@ -78,7 +82,7 @@ impl PubSubAdapter for TCPClientAdapter {
             }
         };
 
-        let packet: TCPPacket = match bincode::deserialize(&buffer) {
+        let packet: TCPPacket = match bincode::deserialize(&self.buffer) {
             Ok(packet) => packet,
             Err(e) => {
                 warn!("Failed to deserialize TCPPacket, read {} bytes: {:?}", last_read, e);
