@@ -29,7 +29,7 @@ async fn main() {
     let server = TCPServerAdapter::new(TCPServerOptions {
         port: 7001,
         address: "0.0.0.0".to_string(),
-        update_interval: Timespan::new_hz(50.0),
+        update_interval: Timespan::new_hz(500.0),
     });
     let server_handle = Arc::new(Mutex::new(server));
     let datastore = Datastore::new().handle();
@@ -41,7 +41,7 @@ async fn main() {
     pubsub.add_sub_callback(topic_key, handle);
 
     loop {
-        tokio::time::sleep(Duration::from_secs_f32(0.25)).await;
+        tokio::time::sleep(Duration::from_secs_f32(0.01)).await;
         pubsub.tick();
     }
 }

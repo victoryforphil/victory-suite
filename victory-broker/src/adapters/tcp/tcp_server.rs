@@ -141,7 +141,14 @@ impl PubSubAdapter for TCPServerAdapter {
                     continue;
                 }
             };
-            client.write(packet.as_slice()).unwrap();
+            match client.write(packet.as_slice()) {
+                Ok(_) => (),
+                Err(e) => {
+                    error!("Failed to write to client: {:?}", e);
+                    // Remove client
+                    self.clients.lock().unwrap().remove(&id);
+                }
+            }
         }
     }
 
