@@ -1,6 +1,7 @@
-use std::time::Duration;
+use std::{sync::{Arc, Mutex}, time::Duration};
 
 use log::{debug, info, warn};
+use victory_broker::{adapters::{PubSubAdapter, PubSubAdapterHandle}, node::Node};
 use victory_data_store::database::{DataView, Datastore};
 use victory_wtf::{Timepoint, Timespan};
 
@@ -8,25 +9,33 @@ use super::{System, SystemHandle};
 
 pub struct BasherSysRunner {
     pub systems: Vec<SystemHandle>,
-    pub data_store: Datastore,
+    pub data_store: Arc<Mutex<Datastore>>,
     pub end_time: Timepoint,
     pub current_time: Timepoint,
     pub dt: Timespan,
     pub real_time: bool,
+    pub pubsub_node: Option<Node>,
 }
 
 impl BasherSysRunner {
     pub fn new() -> BasherSysRunner {
         BasherSysRunner {
             systems: Vec::new(),
-            data_store: Datastore::new(),
+            data_store: Arc::new(Mutex::new(Datastore::new())),
             end_time: Timepoint::zero(),
             current_time: Timepoint::zero(),
             dt: Timespan::new_hz(100.0),
             real_time: false,
+            pubsub_node: None,
         }
     }
-
+    pub fn enable_pubsub(&mut self, adapter: PubSubAdapterHandle) {
+        self.pubsub_node = Some(Node::new(
+            "Commander PubSub Node".to_string(),
+            adapter,
+            self.data_store.clone(),
+        ));
+    }
     pub fn add_system(&mut self, system: SystemHandle) {
         self.systems.push(system);
     }
@@ -51,11 +60,11 @@ impl BasherSysRunner {
 
                 let mut inputs = DataView::new();
                 for topic in sub.iter() {
-                    inputs = inputs.add_query(&self.data_store, topic).unwrap();
+                    inputs = inputs.add_query(&self.data_store.lock().unwrap(), topic).unwrap();
                 }
 
                 let new_data = system.execute(&inputs, self.dt.clone());
-                self.data_store.apply_view(new_data).unwrap();
+                self.data_store.lock().unwrap().apply_view(new_data).unwrap();
             }
             let end_time = Timepoint::now();
             let elapsed = end_time - start_time;
