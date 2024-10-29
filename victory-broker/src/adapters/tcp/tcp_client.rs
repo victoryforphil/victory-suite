@@ -56,7 +56,7 @@ impl TCPClientAdapter {
             options,
             stream: Arc::new(Mutex::new(stream)),
             id: None,
-            buffer: vec![0; 1024 * 64],
+            buffer: vec![],
         })
     }
 }
@@ -67,25 +67,10 @@ impl PubSubAdapter for TCPClientAdapter {
 
         let mut res = HashMap::new();
         let mut stream = stream.lock().unwrap();
-        
-        let mut last_read = 0;
-        // reset buffer
-        self.buffer.fill(0);
-
-        match stream.read(&mut self.buffer) {
-            Ok(n) => {
-               last_read = n;
-            }
-            Err(e) => {
-               // warn!("Failed to read from stream: {:?}", e);
-                return res;
-            }
-        };
-
-        let packet: TCPPacket = match bincode::deserialize(&self.buffer) {
+        let packet: TCPPacket = match bincode::deserialize_from(&mut *stream) {
             Ok(packet) => packet,
             Err(e) => {
-                warn!("Failed to deserialize TCPPacket, read {} bytes: {:?}", last_read, e);
+                warn!("Failed to deserialize TCPPacket, read {} bytes: {:?}", 0, e);
                 return res;
             }
         };

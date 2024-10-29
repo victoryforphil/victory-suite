@@ -132,12 +132,7 @@ impl PubSubAdapter for TCPServerAdapter {
                     to: id,
                     messages: chunk.to_vec(),
                 };
-                let packet = bincode::serialize(&packet).unwrap();
-                trace!(
-                    "Sending TCPPacket to client: {:?} with {} messages",
-                    id,
-                    chunk.len()
-                );
+                
                 let clients = clients.lock().unwrap();
                 let mut client = match clients.first_key_value() {
                     Some(client) => client.1,
@@ -146,7 +141,7 @@ impl PubSubAdapter for TCPServerAdapter {
                         continue;
                     }
                 };
-                match client.write(packet.as_slice()) {
+                match bincode::serialize_into(&mut client, &packet) {
                     Ok(_) => (),
                     Err(e) => {
                         error!("Failed to write to client: {:?}", e);
@@ -168,15 +163,8 @@ impl PubSubAdapter for TCPServerAdapter {
                 return res;
             }
         };
-        for (id, stream) in client_write_lock.iter_mut() {
-            match stream.read(&mut self.buffer) {
-                Ok(n) => {}
-                Err(e) => {
-                    continue;
-                }
-            };
-
-            let packet: TCPPacket = match bincode::deserialize(&self.buffer) {
+        for (_id, stream) in client_write_lock.iter_mut() {
+            let packet: TCPPacket = match bincode::deserialize_from(&mut *stream) {
                 Ok(packet) => packet,
                 Err(e) => {
                     warn!("Failed to deserialize TCPPacket: {:?}", e);
