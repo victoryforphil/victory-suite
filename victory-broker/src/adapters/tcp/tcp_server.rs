@@ -67,6 +67,7 @@ impl ListenerAgent {
     fn tick(&mut self) {
         let (stream, addr) = self.listener.accept().unwrap();
         stream.set_nonblocking(true).unwrap();
+        stream.set_nodelay(true).unwrap();
         debug!("New TCP Stream: {:?}", addr);
         {
             let id = rand::random::<PubSubChannelIDType>();
@@ -120,25 +121,26 @@ impl PubSubAdapter for TCPServerAdapter {
 
         for (id, messages) in to_send {
            
-           
-            let n_messages = messages.len();
-            let packet = TCPPacket {
+           // Divide messages into chunks of 4
+           let mut chunks = messages.chunks(4);
+           while let Some(chunk) = chunks.next() {
+           let packet = TCPPacket {
                 from: 0,
                 to: id,
-                messages,
+                    messages: chunk.to_vec(),
             };
             let packet = bincode::serialize(&packet).unwrap();
             trace!(
                 "Sending TCPPacket to client: {:?} with {} messages",
                 id,
-                n_messages
+                chunk.len()
             );
             let clients = clients.lock().unwrap();
             let mut client = match clients.first_key_value() {
-                Some(client) => client.1,
-                None => {
-                    warn!("TCP Stream not found for client id: {:?}", id);
-                    continue;
+                    Some(client) => client.1,
+                    None => {
+                        warn!("TCP Stream not found for client id: {:?}", id);
+                        continue;
                 }
             };
             match client.write(packet.as_slice()) {
@@ -147,6 +149,7 @@ impl PubSubAdapter for TCPServerAdapter {
                     error!("Failed to write to client: {:?}", e);
                     // Remove client
                     self.clients.lock().unwrap().remove(&id);
+                    }
                 }
             }
         }

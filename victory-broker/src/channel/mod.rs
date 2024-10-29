@@ -71,7 +71,7 @@ impl PubSubChannel {
     }
 
     pub fn drain_send_queue(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>> {
-        self.send_queue.drain().take(16).collect()
+        self.send_queue.drain().take(4).collect()
     }
 
     pub fn drain_recv_queue(&mut self) -> Vec<Datapoint> {
