@@ -1,14 +1,9 @@
 use std::{
-    collections::{BTreeMap, HashMap},
-    sync::Arc,
+    collections::{BTreeMap, HashMap}, io::{Read, Write}, net::{TcpListener, TcpStream}, sync::{Arc, Mutex}, thread::{self, JoinHandle}
 };
 
 use log::{debug, error, info, trace};
-use tokio::{
-    net::{TcpListener, TcpStream},
-    sync::{Mutex, RwLock},
-    task::JoinHandle,
-};
+
 use tracing::warn;
 use victory_wtf::Timespan;
 
@@ -23,7 +18,7 @@ pub struct TCPServerOptions {
     pub address: String,
     pub update_interval: Timespan,
 }
-pub type TCPClientMapHandle = Arc<RwLock<BTreeMap<PubSubChannelIDType, TcpStream>>>;
+pub type TCPClientMapHandle = Arc<Mutex<BTreeMap<PubSubChannelIDType, TcpStream>>>;
 
 struct ListenerAgent {
     options: TCPServerOptions,
@@ -33,7 +28,7 @@ struct ListenerAgent {
 
 impl ListenerAgent {
     pub fn make_client_map() -> TCPClientMapHandle {
-        Arc::new(RwLock::new(BTreeMap::new()))
+        Arc::new(Mutex::new(BTreeMap::new()))
     }
     pub fn start(options: TCPServerOptions, clients_out: TCPClientMapHandle) -> JoinHandle<()> {
         info!(
@@ -41,14 +36,14 @@ impl ListenerAgent {
             std::thread::current().id(),
             options
         );
-        tokio::spawn(async move {
+        thread::spawn( move || {
             debug!(
                 "ListenerAgent new thread: {:?}",
                 std::thread::current().id()
             );
             let url = format!("{}:{}", options.address, options.port);
             info!("Starting TCP server on: {}", url);
-            let listener = TcpListener::bind(url).await;
+            let listener = TcpListener::bind(url);
             let listener = match listener {
                 Ok(listener) => listener,
                 Err(e) => {
@@ -63,18 +58,18 @@ impl ListenerAgent {
                 clients_out,
             };
             loop {
-                agent.tick().await;
-                tokio::time::sleep(options.update_interval.as_duration()).await;
+                agent.tick();
+                thread::sleep(options.update_interval.as_duration());
             }
         })
     }
 
-    async fn tick(&mut self) {
-        let (stream, addr) = self.listener.accept().await.unwrap();
+    fn tick(&mut self) {
+        let (stream, addr) = self.listener.accept().unwrap();
         debug!("New TCP Stream: {:?}", addr);
         {
             let id = rand::random::<PubSubChannelIDType>();
-            self.clients_out.write().await.insert(id, stream);
+            self.clients_out.lock().unwrap().insert(id, stream);
             debug!("New client registered: {:?} from {:?}", id, addr);
         }
     }
@@ -107,7 +102,7 @@ impl PubSubAdapter for TCPServerAdapter {
     }
 
     fn get_stats(&self) -> HashMap<String, String> {
-        let clients = self.clients.try_read().unwrap();
+        let clients = self.clients.lock().unwrap();
         let n_clients = clients.len();
         let mut stats = HashMap::new();
         stats.insert("n_clients".to_string(), n_clients.to_string());
@@ -120,15 +115,15 @@ impl PubSubAdapter for TCPServerAdapter {
             return;
         }
 
-        tokio::spawn(async move {
+        thread::spawn(move || {
             debug!(
                 "Spawned new TCP write task: {:?}",
                 std::thread::current().id()
             );
             for (id, messages) in to_send {
-                let clients = clients.write().await;
+                let clients = clients.lock().unwrap();
 
-                let client = match clients.first_key_value() {
+                let mut client = match clients.first_key_value() {
                     Some(client) => client.1,
                     None => {
                         warn!("TCP Stream not found for client id: {:?}", id);
@@ -149,7 +144,7 @@ impl PubSubAdapter for TCPServerAdapter {
                     id,
                     n_messages
                 );
-                client.try_write(packet.as_slice()).unwrap();
+                client.write(packet.as_slice()).unwrap();
             }
         });
     }
@@ -157,7 +152,7 @@ impl PubSubAdapter for TCPServerAdapter {
     fn read(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>> {
         let clients = self.clients.clone();
         let mut res = HashMap::new();
-        let mut client_write_lock = match clients.try_write() {
+        let mut client_write_lock = match clients.try_lock() {
             Ok(lock) => lock,
             Err(e) => {
                 warn!("Failed to get write lock on clients: {:?}", e);
@@ -166,7 +161,7 @@ impl PubSubAdapter for TCPServerAdapter {
         };
         for (id, stream) in client_write_lock.iter_mut() {
             let mut buffer = vec![0; 1024];
-            match stream.try_read(&mut buffer) {
+            match stream.read(&mut buffer) {
                 Ok(n) => {
                     buffer = buffer[..n].to_vec();
                 }
