@@ -1,5 +1,9 @@
 use std::{
-    collections::{BTreeMap, HashMap}, io::{Read, Write}, net::{TcpListener, TcpStream}, sync::{Arc, Mutex}, thread::{self, JoinHandle}
+    collections::{BTreeMap, HashMap},
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
+    sync::{Arc, Mutex},
+    thread::{self, JoinHandle},
 };
 
 use log::{debug, error, info, trace};
@@ -36,7 +40,7 @@ impl ListenerAgent {
             std::thread::current().id(),
             options
         );
-        thread::spawn( move || {
+        thread::spawn(move || {
             debug!(
                 "ListenerAgent new thread: {:?}",
                 std::thread::current().id()
@@ -51,7 +55,7 @@ impl ListenerAgent {
                     return;
                 }
             };
-      
+
             let mut agent = ListenerAgent {
                 options: options.clone(),
                 listener,
@@ -120,35 +124,34 @@ impl PubSubAdapter for TCPServerAdapter {
         }
 
         for (id, messages) in to_send {
-           
-           // Divide messages into chunks of 4
-           let mut chunks = messages.chunks(4);
-           while let Some(chunk) = chunks.next() {
-           let packet = TCPPacket {
-                from: 0,
-                to: id,
+            // Divide messages into chunks of 4
+            let mut chunks = messages.chunks(4);
+            while let Some(chunk) = chunks.next() {
+                let packet = TCPPacket {
+                    from: 0,
+                    to: id,
                     messages: chunk.to_vec(),
-            };
-            let packet = bincode::serialize(&packet).unwrap();
-            trace!(
-                "Sending TCPPacket to client: {:?} with {} messages",
-                id,
-                chunk.len()
-            );
-            let clients = clients.lock().unwrap();
-            let mut client = match clients.first_key_value() {
+                };
+                let packet = bincode::serialize(&packet).unwrap();
+                trace!(
+                    "Sending TCPPacket to client: {:?} with {} messages",
+                    id,
+                    chunk.len()
+                );
+                let clients = clients.lock().unwrap();
+                let mut client = match clients.first_key_value() {
                     Some(client) => client.1,
                     None => {
                         warn!("TCP Stream not found for client id: {:?}", id);
                         continue;
-                }
-            };
-            match client.write(packet.as_slice()) {
-                Ok(_) => (),
-                Err(e) => {
-                    error!("Failed to write to client: {:?}", e);
-                    // Remove client
-                    self.clients.lock().unwrap().remove(&id);
+                    }
+                };
+                match client.write(packet.as_slice()) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        error!("Failed to write to client: {:?}", e);
+                        // Remove client
+                        self.clients.lock().unwrap().remove(&id);
                     }
                 }
             }
@@ -166,12 +169,8 @@ impl PubSubAdapter for TCPServerAdapter {
             }
         };
         for (id, stream) in client_write_lock.iter_mut() {
-            
-          
             match stream.read(&mut self.buffer) {
-                Ok(n) => {
-                
-                }
+                Ok(n) => {}
                 Err(e) => {
                     continue;
                 }

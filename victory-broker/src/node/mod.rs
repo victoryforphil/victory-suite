@@ -101,14 +101,9 @@ impl Node {
             for (_, channel) in self.channels.iter_mut() {
                 let mut channel = channel.lock().unwrap();
                 let send_queue = channel.drain_send_queue();
-                if send_queue.len() > 0 {
-                    debug!(
-                        "Channel #{} sending {} messages",
-                        channel.id,
-                        send_queue.len()
-                    );
+                for (channel_id, messages) in send_queue {
+                    channel_map.entry(channel_id).or_insert(Vec::new()).extend(messages);
                 }
-                channel_map.extend(send_queue);
             }
             channel_map
         };
