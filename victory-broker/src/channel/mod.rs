@@ -73,7 +73,11 @@ impl PubSubChannel {
     pub fn drain_send_queue(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>> {
         let mut to_send = HashMap::new();
         for (channel_id, messages) in self.send_queue.iter_mut() {
-            to_send.insert(*channel_id, messages.drain(..).take(16).collect());
+            // Split messages into chunks of 8
+            let mut chunks = messages.chunks(8);
+            while let Some(chunk) = chunks.next() {
+                to_send.insert(*channel_id, chunk.to_vec());
+            }
         }
         to_send
     }
