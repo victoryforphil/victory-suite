@@ -66,9 +66,11 @@ impl PubSubAdapter for TCPClientAdapter {
         let mut buffer = vec![0; 1024];
         let mut stream = stream.lock().unwrap();
         
+        let mut last_read = 0;
+        
         match stream.read(&mut buffer) {
             Ok(n) => {
-              
+               last_read = n;
             }
             Err(e) => {
                // warn!("Failed to read from stream: {:?}", e);
@@ -76,7 +78,13 @@ impl PubSubAdapter for TCPClientAdapter {
             }
         };
 
-        let packet: TCPPacket = bincode::deserialize(&buffer).unwrap();
+        let packet: TCPPacket = match bincode::deserialize(&buffer) {
+            Ok(packet) => packet,
+            Err(e) => {
+                warn!("Failed to deserialize TCPPacket, read {} bytes: {:?}", last_read, e);
+                return res;
+            }
+        };
         let id = packet.to;
         trace!(
             "Received TCPPacket from client: {:?} with {} messages",
