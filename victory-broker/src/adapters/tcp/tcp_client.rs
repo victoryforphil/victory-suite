@@ -56,7 +56,7 @@ impl TCPClientAdapter {
             options,
             stream: Arc::new(Mutex::new(stream)),
             id: None,
-            buffer: vec![0; 1024 * 16],
+            buffer: vec![0; 1024 * 64],
         })
     }
 }
