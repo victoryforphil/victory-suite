@@ -125,7 +125,7 @@ impl PubSubAdapter for TCPServerAdapter {
 
         for (id, messages) in to_send {
             // Divide messages into chunks of 4
-            let mut chunks = messages.chunks(4);
+            let mut chunks = messages.chunks(2);
             while let Some(chunk) = chunks.next() {
                 let packet = TCPPacket {
                     from: 0,
@@ -144,7 +144,7 @@ impl PubSubAdapter for TCPServerAdapter {
                 match bincode::serialize_into(&mut client, &packet) {
                     Ok(_) => (),
                     Err(e) => {
-                        error!("Failed to write to client: {:?}", e);
+                        //error!("Failed to write to client: {:?}", e);
                         // Remove client
                         self.clients.lock().unwrap().remove(&id);
                     }
