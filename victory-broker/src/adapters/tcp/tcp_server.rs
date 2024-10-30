@@ -126,7 +126,7 @@ impl PubSubAdapter for TCPServerAdapter {
       
         for (id, messages) in to_send {
             // Divide messages into chunks of 4
-            let mut chunks = messages.chunks(4);
+            let mut chunks = messages.chunks(32);
             while let Some(chunk) = chunks.next() {
                 let packet = TCPPacket {
                     from: 0,
