@@ -8,6 +8,7 @@ use std::{
 
 use log::{debug, error, info, trace};
 
+
 use tracing::warn;
 use victory_wtf::Timespan;
 
@@ -122,7 +123,7 @@ impl PubSubAdapter for TCPServerAdapter {
         if to_send.is_empty() {
             return;
         }
-
+        let mut clients = clients.lock().unwrap();
         for (id, messages) in to_send {
             // Divide messages into chunks of 4
             let mut chunks = messages.chunks(4);
@@ -133,7 +134,7 @@ impl PubSubAdapter for TCPServerAdapter {
                     messages: chunk.to_vec(),
                 };
                 
-                let clients = clients.lock().unwrap();
+               
                 let mut client = match clients.first_key_value() {
                     Some(client) => client.1,
                     None => {
