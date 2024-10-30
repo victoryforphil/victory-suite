@@ -148,7 +148,7 @@ impl PubSubAdapter for TCPServerAdapter {
                     Err(e) => {
                         error!("Failed to write to client: {:?}", e);
                         // Remove client
-                        client.shutdown(std::net::Shutdown::Both).unwrap();
+                        client.shutdown(std::net::Shutdown::Both);
                         self.clients.lock().unwrap().remove(&id);
                     }
                 }
