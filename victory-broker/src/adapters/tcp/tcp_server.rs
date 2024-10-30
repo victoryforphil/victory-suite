@@ -169,7 +169,7 @@ impl PubSubAdapter for TCPServerAdapter {
             let packet: TCPPacket = match bincode::deserialize_from(&mut *stream) {
                 Ok(packet) => packet,
                 Err(e) => {
-                    warn!("Failed to deserialize TCPPacket: {:?}", e);
+                  
                     continue;
                 }
             };
