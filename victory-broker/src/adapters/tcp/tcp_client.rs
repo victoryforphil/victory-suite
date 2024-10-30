@@ -83,7 +83,7 @@ impl PubSubAdapter for TCPClientAdapter {
 
     fn write(&mut self, to_send: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>) {
 
-      
+        
         for (id, messages) in to_send.into_iter() {
             let mut stream = self.stream.try_lock().unwrap();
             let packet = TCPPacket {
@@ -91,6 +91,7 @@ impl PubSubAdapter for TCPClientAdapter {
                 to: id,
                 messages,
             };
+            
             match bincode::serialize_into(&mut *stream, &packet) {
                 Ok(_) => (),
                 Err(e) => {

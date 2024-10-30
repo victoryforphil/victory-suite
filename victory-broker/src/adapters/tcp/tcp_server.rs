@@ -142,6 +142,7 @@ impl PubSubAdapter for TCPServerAdapter {
                         continue;
                     }
                 };
+                client.set_nonblocking(true).unwrap();
                 match bincode::serialize_into(&mut client, &packet) {
                     Ok(_) => (),
                     Err(e) => {
@@ -150,6 +151,7 @@ impl PubSubAdapter for TCPServerAdapter {
                         //self.clients.lock().unwrap().remove(&id);
                     }
                 }
+                client.set_nonblocking(false).unwrap();
             }
         }
     }
