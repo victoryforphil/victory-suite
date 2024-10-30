@@ -63,14 +63,11 @@ impl TCPClientAdapter {
 
 impl PubSubAdapter for TCPClientAdapter {
     fn read(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>> {
-        let stream = self.stream.clone();
-
         let mut res = HashMap::new();
-        let mut stream = stream.lock().unwrap();
+        let mut stream = self.stream.try_lock().unwrap();
         let packet: TCPPacket = match bincode::deserialize_from(&mut *stream) {
             Ok(packet) => packet,
             Err(e) => {
-                warn!("Failed to deserialize TCPPacket, read {} bytes: {:?}", 0, e);
                 return res;
             }
         };
@@ -85,23 +82,24 @@ impl PubSubAdapter for TCPClientAdapter {
     }
 
     fn write(&mut self, to_send: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>) {
-        let stream = self.stream.clone();
 
-        for (id, messages) in to_send.iter() {
-            let mut stream = stream.lock().unwrap();
-            let n_messages = messages.len();
+      
+        for (id, messages) in to_send.into_iter() {
+            let mut stream = self.stream.try_lock().unwrap();
             let packet = TCPPacket {
-                from: *id,
-                to: *id,
-                messages: messages.clone(),
+                from: id,
+                to: id,
+                messages,
             };
-            let packet = bincode::serialize(&packet).unwrap();
-            let size = packet.len() as u32;
-            debug!(
-                "Sending TCPPacket of size {} bytes, containing {} messages",
-                size, n_messages
-            );
-            stream.write(packet.as_slice()).unwrap();
+            match bincode::serialize_into(&mut *stream, &packet) {
+                Ok(_) => (),
+                Err(e) => {
+                    warn!("Failed to serialize / send TCPPacket: {:?}", e);
+                    return;
+                }
+            };
+          
+          
         }
     }
 

@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-pub trait BucketListener: Debug {
+pub trait BucketListener: Debug + Send {
     fn on_datapoint(&mut self, datapoint: &Datapoint);
     fn get_filter(&self) -> Option<TopicKey> {
         None

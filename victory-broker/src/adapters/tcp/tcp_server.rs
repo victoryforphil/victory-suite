@@ -100,7 +100,7 @@ impl TCPServerAdapter {
             agent,
             clients,
             options,
-            buffer: vec![0; 1024],
+            buffer: vec![0; 2048],
         }
     }
 }
@@ -134,7 +134,7 @@ impl PubSubAdapter for TCPServerAdapter {
                     messages: chunk.to_vec(),
                 };
                 
-                let mut clients = clients.lock().unwrap();
+                let clients = clients.lock().unwrap();
                 let mut client = match clients.first_key_value() {
                     Some(client) => client.1,
                     None => {
@@ -169,7 +169,7 @@ impl PubSubAdapter for TCPServerAdapter {
             let packet: TCPPacket = match bincode::deserialize_from(&mut *stream) {
                 Ok(packet) => packet,
                 Err(e) => {
-                    //warn!("Failed to deserialize TCPPacket: {:?}", e);
+                    warn!("Failed to deserialize TCPPacket: {:?}", e);
                     continue;
                 }
             };
