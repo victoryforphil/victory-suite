@@ -10,7 +10,7 @@ use super::{System, SystemHandle};
 pub struct BasherSysRunner {
     pub systems: Vec<SystemHandle>,
     pub data_store: Arc<Mutex<Datastore>>,
-    pub end_time: Timepoint,
+    pub end_time: Option<Timepoint>,
     pub current_time: Timepoint,
     pub dt: Timespan,
     pub real_time: bool,
@@ -22,12 +22,16 @@ impl BasherSysRunner {
         BasherSysRunner {
             systems: Vec::new(),
             data_store: Arc::new(Mutex::new(Datastore::new())),
-            end_time: Timepoint::zero(),
+            end_time: None,
             current_time: Timepoint::zero(),
             dt: Timespan::new_hz(100.0),
             real_time: false,
             pubsub_node: None,
         }
+    }
+
+    pub fn set_end_time(&mut self, end_time: Timepoint) {
+        self.end_time = Some(end_time);
     }
     pub fn enable_pubsub(&mut self, adapter: PubSubAdapterHandle) {
         self.pubsub_node = Some(Node::new(
@@ -43,16 +47,29 @@ impl BasherSysRunner {
     pub fn set_real_time(&mut self, real_time: bool) {
         self.real_time = real_time;
     }
-    pub fn run(&mut self, end_time: Timepoint) {
-        self.end_time = end_time;
+    
+    pub fn run(&mut self) {
+      
         self.current_time = Timepoint::zero();
 
         for system in self.systems.iter_mut() {
             log::info!("Initializing system: {:?}", system.lock().unwrap().name());
             system.lock().unwrap().init();
         }
-        info!("Running main loop for {:?}s", self.end_time.secs());
-        while self.current_time < self.end_time {
+        
+
+
+        let end_time = match &self.end_time {
+            Some(end_time) => {
+                info!("Running main loop for {:?}", end_time);
+                end_time.clone()
+            },
+            None => {
+                info!("Running main loop indefinitely");
+                Timepoint::now() + Timespan::new_hz(100.0)
+            },
+        };
+        while self.current_time < end_time {
 
             if let Some(node) = &mut self.pubsub_node {
                 node.tick();

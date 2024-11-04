@@ -22,7 +22,8 @@ pub fn main() {
     let time_system = TimeScaleSystem::new("time_data");
     runner.add_system(Arc::new(Mutex::new(time_system)));
 
-    runner.run(Timepoint::new_secs(1000.0));
+    runner.set_end_time(Timepoint::new_secs(1000.0));
+    runner.run();
 
     for key in runner.data_store.lock().unwrap().get_all_keys() {
         info!("Key: {:?}", key);
