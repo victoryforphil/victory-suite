@@ -66,6 +66,11 @@ impl Bucket {
         self.values.insert(data_point.time.clone(), data_point);
     }
 
+    /// Update a datapoint in the bucket without notifying listeners
+    pub fn update_datapoint(&mut self, data_point: Datapoint) {
+        self.values.insert(data_point.time.clone(), data_point);
+    }
+
     pub fn get_latest_datapoint(&self) -> Option<&Datapoint> {
         self.values.iter().last().map(|(_, v)| v)
     }

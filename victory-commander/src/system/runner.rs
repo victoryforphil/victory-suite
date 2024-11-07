@@ -35,7 +35,7 @@ impl RunnerPubSubCallback {
 impl SubCallback for RunnerPubSubCallback {
     fn on_update(&mut self, datapoints: &victory_data_store::datapoints::DatapointMap) {
         for (key, value) in datapoints.iter() {
-            self.bucket.write().unwrap().add_datapoint(value.clone());
+            self.bucket.write().unwrap().update_datapoint(value.clone());
         }
     }
 }
@@ -98,9 +98,8 @@ impl BasherSysRunner {
                 let sub = system.lock().unwrap().get_subscribed_topics();
                 for topic in sub.iter() {
                     debug!("Adding pubsub runner callback for topic {:?}", topic);
-                    let callback = RunnerPubSubCallback::new(
-                        self.data_store.lock().unwrap().get_bucket(topic).unwrap(),
-                    );
+                    let bucket = self.data_store.lock().unwrap().get_or_create_bucket(topic);
+                    let callback = RunnerPubSubCallback::new(bucket);
                     let callback = Arc::new(Mutex::new(callback));
                     self.pubsub_callbacks
                         .insert(topic.handle().clone(), callback.clone());

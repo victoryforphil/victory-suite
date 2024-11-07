@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use log::debug;
+use log::{debug, warn};
 use victory_data_store::{buckets::listener::BucketListener, datapoints::Datapoint};
 
 pub struct NodeBucketListener {
@@ -15,6 +15,12 @@ impl BucketListener for NodeBucketListener {
     fn on_datapoint(&mut self, datapoint: &Datapoint) {
         debug!("NodeBucketListener received datapoint: {}", datapoint.topic);
         self.msgs.push(datapoint.clone());
+
+        // if over 2048, drop older 512
+        if self.msgs.len() > 2048 {
+            warn!("NodeBucketListener queue overflow, dropping 512 datapoints");
+            self.msgs.drain(..512);
+        }
     }
 }
 

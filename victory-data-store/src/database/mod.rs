@@ -195,7 +195,7 @@ impl Datastore {
 
     pub fn create_bucket<T: TopicKeyProvider>(&mut self, topic: &T) {
         if !self.buckets.contains_key(&topic.handle()) {
-            debug!("Creating new bucket for topic {:?}", topic.key());
+            trace!("Creating new bucket for topic {:?}", topic.key());
             let bucket = Bucket::new(topic);
             // Check to see if any of the listens could apply to this bucket
             let listeners = self.listeners.clone();
@@ -211,6 +211,11 @@ impl Datastore {
             }
             self.buckets.insert(topic.handle().clone(), bucket);
         }
+    }
+
+    pub fn get_or_create_bucket<T: TopicKeyProvider>(&mut self, topic: &T) -> BucketHandle {
+        self.create_bucket(topic);
+        self.get_bucket(topic).unwrap()
     }
 
     pub fn get_bucket<T: TopicKeyProvider>(

@@ -4,7 +4,7 @@ use std::{
     vec,
 };
 
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 use thiserror::Error;
 use victory_data_store::{
     buckets::BucketHandle,
@@ -142,7 +142,14 @@ impl PubSubChannel {
                 new_datapoints.push(datapoint.clone());
             }
         }
+
         self.recv_queue.append(&mut new_datapoints);
+
+        // if queue is over 2048, drop older 512
+        if self.recv_queue.len() > 2048 {
+            warn!("PubSubChannel #{} recv queue overflow, dropping 512 datapoints", self.id);
+            self.recv_queue.drain(..512);
+        }
     }
 
     pub fn on_subscribe(&mut self, topic: TopicKeyHandle) {
@@ -169,6 +176,14 @@ impl PubSubChannel {
             "Channel #{} sending publish message for {:?}",
             self.id, datapoint.topic
         );
+
+
+        // if queue is over 2048, drop older 512
+        if self.send_queue.len() > 2048 {
+            warn!("PubSubChannel #{} send queue overflow, dropping 512 datapoints", self.id);
+            self.send_queue.drain();
+        }
+
         let publish_message = PubSubMessage::Publish(PublishMessage::single(datapoint));
         self.send_queue
             .entry(self.id)
