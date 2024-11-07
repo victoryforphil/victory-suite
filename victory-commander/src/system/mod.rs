@@ -10,7 +10,6 @@ use victory_wtf::Timespan;
 /// Will use its inputs to generate a data store query to feed said inputs into the system.
 pub mod runner;
 
-
 pub trait System {
     fn init(&mut self);
     fn get_subscribed_topics(&self) -> BTreeSet<TopicKey>;

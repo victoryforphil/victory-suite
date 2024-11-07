@@ -95,7 +95,6 @@ impl Node {
         self.apply_datapoints(&msgs);
         self.notify_sub_callbacks(&msgs);
 
-
         for (_, channel) in self.channels.iter_mut() {
             let mut channel = channel.lock().unwrap();
             let send_queue = channel.drain_send_queue();
@@ -104,7 +103,10 @@ impl Node {
                 // Chunk messages into 8
                 let mut chunks = messages.chunks(16);
                 while let Some(chunk) = chunks.next() {
-                    self.adapter.lock().unwrap().write(HashMap::from([(channel_id, chunk.to_vec())]));
+                    self.adapter
+                        .lock()
+                        .unwrap()
+                        .write(HashMap::from([(channel_id, chunk.to_vec())]));
                 }
             }
         }
@@ -189,12 +191,12 @@ impl Node {
             topic,
             channel_id
         );
-      
+
         {
             let mut datastore = self.datastore.lock().unwrap();
             let channel = self.channels.get_mut(&channel_id).unwrap();
             let mut channel = channel.lock().unwrap();
-           
+
             datastore
                 .add_listener(topic.key(), self.bucket_listener.clone())
                 .expect("Failed to add listener");

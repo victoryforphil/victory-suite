@@ -1,5 +1,8 @@
 use std::{
-    collections::HashMap, sync::{Arc, Mutex}, thread, time::Duration
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    thread,
+    time::Duration,
 };
 
 use log::{debug, info};
@@ -9,7 +12,6 @@ use victory_broker::{
 };
 use victory_data_store::{database::Datastore, test_util::BigState, topics::TopicKey};
 use victory_wtf::Timepoint;
-
 
 fn main() {
     pretty_env_logger::init();
@@ -31,22 +33,17 @@ fn main() {
 
     // Spawn test send thread
     let datastore = datastore.clone();
-    thread::spawn(move || {
-        loop {
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let big_struct = BigState::new();
-            datastore.lock().unwrap().add_struct(
-                &topic_key,
-                Timepoint::now(),
-                big_struct,
-            );
-
-        }
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_secs_f32(0.5));
+        let big_struct = BigState::new();
+        datastore
+            .lock()
+            .unwrap()
+            .add_struct(&topic_key, Timepoint::now(), big_struct);
     });
 
     loop {
         thread::sleep(Duration::from_secs_f32(0.01));
         node.tick();
-       
     }
 }

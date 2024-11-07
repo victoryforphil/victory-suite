@@ -200,7 +200,10 @@ impl Datastore {
             // Check to see if any of the listens could apply to this bucket
             let listeners = self.listeners.clone();
             for (key, listeners) in listeners {
-                if key.key().is_child_of(topic.key()) || key.key() == topic.key() || topic.key().is_child_of(key.key()) {
+                if key.key().is_child_of(topic.key())
+                    || key.key() == topic.key()
+                    || topic.key().is_child_of(key.key())
+                {
                     for listener in listeners {
                         bucket.write().unwrap().add_listener(listener.clone());
                     }

@@ -16,7 +16,6 @@ pub struct TCPNodeSubscriber {}
 
 impl SubCallback for TCPNodeSubscriber {
     fn on_update(&mut self, datapoints: &victory_data_store::datapoints::DatapointMap) {
-
         info!("Received {} datapoints", datapoints.len());
     }
 }

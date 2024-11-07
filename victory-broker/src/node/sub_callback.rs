@@ -8,4 +8,4 @@ pub trait SubCallback {
     fn on_update(&mut self, datapoints: &DatapointMap);
 }
 
-pub type SubCallbackHandle = MutexType<dyn SubCallback>;
+pub type SubCallbackHandle = MutexType<dyn SubCallback + Send>;

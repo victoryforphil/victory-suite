@@ -1,12 +1,46 @@
-use std::{sync::{Arc, Mutex}, time::Duration};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use log::{debug, info, warn};
-use victory_broker::{adapters::{PubSubAdapter, PubSubAdapterHandle}, node::Node};
-use victory_data_store::database::{DataView, Datastore};
+use victory_broker::{
+    adapters::{PubSubAdapter, PubSubAdapterHandle},
+    node::{sub_callback::SubCallback, Node},
+};
+use victory_data_store::{
+    buckets::BucketHandle,
+    database::{DataView, Datastore},
+    topics::{TopicKeyHandle, TopicKeyProvider},
+};
 use victory_wtf::{Timepoint, Timespan};
 
 use super::{System, SystemHandle};
 
+pub struct RunnerPubSubCallback {
+    bucket: BucketHandle,
+}
+
+impl RunnerPubSubCallback {
+    pub fn new(bucket: BucketHandle) -> RunnerPubSubCallback {
+        debug!(
+            "RunnerPubSubCallback::new: Creating new RunnerPubSubCallback for bucket {:?}",
+            bucket
+        );
+        RunnerPubSubCallback { bucket }
+    }
+}
+
+impl SubCallback for RunnerPubSubCallback {
+    fn on_update(&mut self, datapoints: &victory_data_store::datapoints::DatapointMap) {
+        for (key, value) in datapoints.iter() {
+            self.bucket.write().unwrap().add_datapoint(value.clone());
+        }
+    }
+}
+
+pub type RunnerPubSubCallbackHandle = Arc<Mutex<dyn SubCallback + Send + Sync>>;
 pub struct BasherSysRunner {
     pub systems: Vec<SystemHandle>,
     pub data_store: Arc<Mutex<Datastore>>,
@@ -15,6 +49,7 @@ pub struct BasherSysRunner {
     pub dt: Timespan,
     pub real_time: bool,
     pub pubsub_node: Option<Node>,
+    pub pubsub_callbacks: BTreeMap<TopicKeyHandle, RunnerPubSubCallbackHandle>,
 }
 
 impl BasherSysRunner {
@@ -27,6 +62,7 @@ impl BasherSysRunner {
             dt: Timespan::new_hz(100.0),
             real_time: false,
             pubsub_node: None,
+            pubsub_callbacks: BTreeMap::new(),
         }
     }
 
@@ -47,30 +83,43 @@ impl BasherSysRunner {
     pub fn set_real_time(&mut self, real_time: bool) {
         self.real_time = real_time;
     }
-    
+
     pub fn run(&mut self) {
-      
         self.current_time = Timepoint::zero();
 
         for system in self.systems.iter_mut() {
             log::info!("Initializing system: {:?}", system.lock().unwrap().name());
             system.lock().unwrap().init();
         }
-        
 
+        // If we have a pubsub node, subscribe to all topics
+        if let Some(node) = &mut self.pubsub_node {
+            for system in self.systems.iter_mut() {
+                let sub = system.lock().unwrap().get_subscribed_topics();
+                for topic in sub.iter() {
+                    debug!("Adding pubsub runner callback for topic {:?}", topic);
+                    let callback = RunnerPubSubCallback::new(
+                        self.data_store.lock().unwrap().get_bucket(topic).unwrap(),
+                    );
+                    let callback = Arc::new(Mutex::new(callback));
+                    self.pubsub_callbacks
+                        .insert(topic.handle().clone(), callback.clone());
+                    node.add_sub_callback(topic.handle(), callback);
+                }
+            }
+        }
 
         let end_time = match &self.end_time {
             Some(end_time) => {
                 info!("Running main loop for {:?}", end_time);
                 end_time.clone()
-            },
+            }
             None => {
                 info!("Running main loop indefinitely");
                 Timepoint::now() + Timespan::new_hz(100.0)
-            },
+            }
         };
         while self.current_time < end_time {
-
             if let Some(node) = &mut self.pubsub_node {
                 node.tick();
             }
@@ -82,11 +131,17 @@ impl BasherSysRunner {
 
                 let mut inputs = DataView::new();
                 for topic in sub.iter() {
-                    inputs = inputs.add_query(&self.data_store.lock().unwrap(), topic).unwrap();
+                    inputs = inputs
+                        .add_query(&self.data_store.lock().unwrap(), topic)
+                        .unwrap();
                 }
 
                 let new_data = system.execute(&inputs, self.dt.clone());
-                self.data_store.lock().unwrap().apply_view(new_data).unwrap();
+                self.data_store
+                    .lock()
+                    .unwrap()
+                    .apply_view(new_data)
+                    .unwrap();
             }
             let end_time = Timepoint::now();
             let elapsed = end_time - start_time;
@@ -105,7 +160,6 @@ impl BasherSysRunner {
             }
 
             self.current_time = self.current_time.clone() + self.dt.clone();
-            
         }
         info!("Finished running main loop");
     }

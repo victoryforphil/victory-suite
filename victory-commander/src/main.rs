@@ -27,7 +27,12 @@ pub fn main() {
 
     for key in runner.data_store.lock().unwrap().get_all_keys() {
         info!("Key: {:?}", key);
-        let latest = runner.data_store.lock().unwrap().get_latest_primitive(&key).unwrap();
+        let latest = runner
+            .data_store
+            .lock()
+            .unwrap()
+            .get_latest_primitive(&key)
+            .unwrap();
         info!("Latest: {:?}", latest);
     }
 }
