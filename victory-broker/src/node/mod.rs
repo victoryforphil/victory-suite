@@ -7,7 +7,6 @@ use bucket_listener::NodeBucketListener;
 use log::{debug, info, trace};
 use sub_callback::SubCallbackHandle;
 use victory_data_store::{
-    buckets::listener::BucketListener,
     database::{Datastore, DatastoreHandle},
     datapoints::{Datapoint, DatapointMap},
     primitives::Primitives,

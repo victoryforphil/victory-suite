@@ -11,7 +11,7 @@ pub mod integer;
 pub mod serde;
 pub mod string;
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub enum Primitives {
     Unset,
     Instant(Timepoint),
@@ -25,3 +25,4 @@ pub enum Primitives {
     Reference(TopicIDType),
     StructType(String),
 }
+

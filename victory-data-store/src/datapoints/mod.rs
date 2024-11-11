@@ -10,7 +10,8 @@ use crate::{
     primitives::Primitives,
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+
 pub struct Datapoint {
     pub topic: TopicKeyHandle,
     pub time: Timepoint,

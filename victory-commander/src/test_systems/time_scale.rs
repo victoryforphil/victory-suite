@@ -1,6 +1,6 @@
 use crate::system::System;
 use serde::{Deserialize, Serialize};
-use victory_data_store::{database::DataView, topics::TopicKey};
+use victory_data_store::{database::view::DataView, topics::TopicKey};
 use victory_wtf::Timespan;
 
 #[derive(Serialize, Deserialize)]

@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use log::debug;
-use victory_data_store::database::{DataView, Datastore};
+use victory_data_store::database::{view::DataView, Datastore};
 use victory_data_store::topics::TopicKey;
 use victory_wtf::{Timepoint, Timespan};
 

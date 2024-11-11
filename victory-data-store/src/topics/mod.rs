@@ -230,6 +230,10 @@ impl TopicKey {
         }
         child.is_child_of(self)
     }
+    /// returns true if the topic is a child, parent or the same as the other topic
+    pub fn matches(&self, other: &TopicKey) -> bool {
+        self.is_child_of(other) || self == other || other.is_child_of(self)
+    }
 
     #[instrument(skip_all, name = "TopicKey::id")]
     pub fn id(&self) -> TopicIDType {

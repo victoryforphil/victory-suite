@@ -1,7 +1,8 @@
 use std::fmt::Debug;
 
 use log::{debug, warn};
-use victory_data_store::{buckets::listener::BucketListener, datapoints::Datapoint};
+use victory_data_store::{database::listener::DataStoreListener, datapoints::Datapoint};
+
 
 pub struct NodeBucketListener {
     msgs: Vec<Datapoint>,
@@ -11,7 +12,7 @@ impl Debug for NodeBucketListener {
         write!(f, "NodeBucketListener")
     }
 }
-impl BucketListener for NodeBucketListener {
+impl DataStoreListener for NodeBucketListener {
     fn on_datapoint(&mut self, datapoint: &Datapoint) {
         debug!("NodeBucketListener received datapoint: {}", datapoint.topic);
         self.msgs.push(datapoint.clone());
@@ -21,6 +22,10 @@ impl BucketListener for NodeBucketListener {
             warn!("NodeBucketListener queue overflow, dropping 512 datapoints");
             self.msgs.drain(..512);
         }
+    }
+    
+    fn on_bucket_update(&mut self, bucket: &victory_data_store::buckets::BucketHandle) {
+        
     }
 }
 
