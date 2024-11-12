@@ -11,7 +11,7 @@ use victory_broker::{
 };
 use victory_data_store::{
     buckets::BucketHandle,
-    database::{DataView, Datastore},
+    database::{view::DataView, Datastore},
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
 use victory_wtf::{Timepoint, Timespan};

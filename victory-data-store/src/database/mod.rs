@@ -1,12 +1,14 @@
 use crate::{
-    buckets::{listener::BucketListener, Bucket, BucketHandle},
+    buckets::{Bucket, BucketHandle},
     datapoints::Datapoint,
     primitives::{
         serde::{deserializer::PrimitiveDeserializer, serialize::to_map},
         Primitives,
     },
+    sync::{config::SyncConfig, DatastoreSync, DatastoreSyncHandle, SyncAdapterHandle},
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
+use listener::DataStoreListener;
 use log::{debug, info, trace, warn};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
@@ -15,114 +17,19 @@ use std::{
 };
 use thiserror::Error;
 use victory_wtf::Timepoint;
+use view::DataView;
 
 pub type DatastoreHandle = Arc<Mutex<Datastore>>;
 
+pub mod listener;
+pub mod view;
 #[derive(Debug, Clone)]
 pub struct Datastore {
     buckets: HashMap<TopicKeyHandle, BucketHandle>,
-    listeners: HashMap<TopicKeyHandle, Vec<Arc<Mutex<dyn BucketListener>>>>,
-}
-#[derive(Debug, Clone)]
-pub struct DataView {
-    pub maps: HashMap<TopicKey, Primitives>,
+    listeners: HashMap<TopicKeyHandle, Vec<Arc<Mutex<dyn DataStoreListener>>>>,
+    pub sync: Option<DatastoreSyncHandle>,
 }
 
-impl Default for DataView {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl DataView {
-    pub fn new() -> DataView {
-        DataView {
-            maps: HashMap::new(),
-        }
-    }
-
-    pub fn add_query(
-        mut self,
-        datastore: &Datastore,
-        topic: &TopicKey,
-    ) -> Result<DataView, DatastoreError> {
-        let buckets = datastore.get_buckets_matching(topic)?;
-        for bucket in buckets {
-            let bucket = bucket.read().unwrap();
-
-            if let Some(value) = bucket.get_latest_datapoint() {
-                let key = value.topic.key().clone();
-                self.maps.insert(key, value.value.clone());
-            }
-        }
-
-        Ok(self)
-    }
-
-    pub fn get_latest_map<T: TopicKeyProvider>(
-        &self,
-        topic: &T,
-    ) -> Result<HashMap<TopicKey, Primitives>, DatastoreError> {
-        let map = self
-            .maps
-            .iter()
-            .filter_map(|(k, v)| {
-                if k.key().is_child_of(topic.key()) {
-                    Some((k.key().clone(), v.clone()))
-                } else if k.key() == topic.key() {
-                    Some((k.key().clone(), v.clone()))
-                } else {
-                    None
-                }
-            })
-            .collect::<HashMap<TopicKey, Primitives>>();
-        Ok(map)
-    }
-    pub fn get_latest<T: TopicKeyProvider, S: DeserializeOwned>(
-        &self,
-        topic: &T,
-    ) -> Result<S, DatastoreError> {
-        let value_map = self
-            .maps
-            .iter()
-            .filter_map(|(k, v)| {
-                if k.key().is_child_of(topic.key()) {
-                    let key = k.key().remove_prefix(topic.key().clone()).unwrap();
-                    Some((key.handle(), v.clone()))
-                } else {
-                    None
-                }
-            })
-            .collect::<HashMap<TopicKeyHandle, Primitives>>();
-
-        // Deserialize the value map into the struct
-        let mut deserializer = PrimitiveDeserializer::new(&value_map);
-        let result = S::deserialize(&mut deserializer)
-            .map_err(|e| DatastoreError::Generic(format!("Error deserializing struct: {:?}", e)));
-
-        match result {
-            Ok(s) => Ok(s),
-            Err(e) => Err(DatastoreError::Generic(format!(
-                "Error deserializing struct: {:?}",
-                e
-            ))),
-        }
-    }
-
-    pub fn add_latest<T: TopicKeyProvider, S: Serialize>(
-        &mut self,
-        topic: &T,
-        value: S,
-    ) -> Result<(), DatastoreError> {
-        let topic_key = topic.key().clone();
-        let value_map = to_map(&value).unwrap();
-        for (key, value) in value_map {
-            let full_key = key.add_prefix(topic_key.clone());
-            self.maps.insert(full_key, value);
-        }
-        Ok(())
-    }
-}
 #[derive(Error, Debug)]
 pub enum DatastoreError {
     #[error("Generic Datastore Error: {0}")]
@@ -142,6 +49,7 @@ impl Datastore {
         Datastore {
             listeners: HashMap::new(),
             buckets: HashMap::new(),
+            sync: None,
         }
     }
 
@@ -149,66 +57,10 @@ impl Datastore {
         Arc::new(Mutex::new(self))
     }
 
-    pub fn get_existing_listeners(&self, topic: &TopicKey) -> Vec<Arc<Mutex<dyn BucketListener>>> {
-        self.buckets
-            .get(&topic.handle())
-            .unwrap()
-            .read()
-            .unwrap()
-            .listeners
-            .clone()
-    }
-
-    pub fn add_listener(
-        &mut self,
-        topic_query: &TopicKey,
-        listener: Arc<Mutex<dyn BucketListener>>,
-    ) -> Result<(), DatastoreError> {
-        self.listeners
-            .entry(topic_query.handle())
-            .or_insert_with(Vec::new)
-            .push(listener.clone());
-        let buckets = self.get_buckets_matching(topic_query)?;
-        if buckets.len() == 0 {
-            warn!(
-                "No buckets found for topic when adding listener {:?}",
-                topic_query
-            );
-        }
-
-        for bucket in buckets {
-            debug!(
-                "Adding listener to bucket {:?}",
-                bucket.read().unwrap().topic.key()
-            );
-            let mut bucket = bucket.write().unwrap();
-            bucket.add_listener(listener.clone());
-        }
-        Ok(())
-    }
-    pub fn apply_view(&mut self, view: DataView) -> Result<(), DatastoreError> {
-        for (key, value) in view.maps {
-            self.add_primitive(&key, Timepoint::now(), value);
-        }
-        Ok(())
-    }
-
     pub fn create_bucket<T: TopicKeyProvider>(&mut self, topic: &T) {
         if !self.buckets.contains_key(&topic.handle()) {
             trace!("Creating new bucket for topic {:?}", topic.key());
             let bucket = Bucket::new(topic);
-            // Check to see if any of the listens could apply to this bucket
-            let listeners = self.listeners.clone();
-            for (key, listeners) in listeners {
-                if key.key().is_child_of(topic.key())
-                    || key.key() == topic.key()
-                    || topic.key().is_child_of(key.key())
-                {
-                    for listener in listeners {
-                        bucket.write().unwrap().add_listener(listener.clone());
-                    }
-                }
-            }
             self.buckets.insert(topic.handle().clone(), bucket);
         }
     }
@@ -305,11 +157,14 @@ impl Datastore {
         let value_map = to_map(&value)
             .map_err(|e| DatastoreError::Generic(format!("Error serializing struct: {:?}", e)))?;
 
+        let mut datapoints = Vec::new();
         for (key, value) in value_map {
             let full_key = key.add_prefix(topic.key().to_owned());
+            let datapoint = Datapoint::new(&full_key, time.clone(), value);
             // Remove the leading slash
-            self.add_primitive(&full_key, time.clone(), value);
+            datapoints.push(datapoint);
         }
+        self.add_datapoints(datapoints);
         Ok(())
     }
 
@@ -328,10 +183,19 @@ impl Datastore {
         bucket.write().unwrap().add_primitive(time, value);
     }
 
-    pub fn add_datapoints(&mut self, datapoints: Vec<Datapoint>) {
+    /// Add datapoints without notifying listeners, usually used when receiving remote datapoints
+    /// that we want to store without triggering any local listeners
+    pub fn add_datapoints_silent(&mut self, datapoints: Vec<Datapoint>) {
         for datapoint in datapoints {
             self.add_primitive(&datapoint.topic, datapoint.time, datapoint.value);
         }
+    }
+
+    pub fn add_datapoints(&mut self, datapoints: Vec<Datapoint>) {
+        for datapoint in datapoints.clone() {
+            self.add_primitive(&datapoint.topic, datapoint.time, datapoint.value);
+        }
+        self.notify_datapoints(datapoints);
     }
 
     pub fn get_latest_primitive<T: TopicKeyProvider>(&self, topic: &T) -> Option<Primitives> {
@@ -398,13 +262,78 @@ impl Datastore {
         let new_values = bucket.get_data_points_after(&time.clone());
         Ok(new_values.iter().map(|v| v.topic.handle()).collect())
     }
+
+    pub fn apply_view(&mut self, view: DataView) -> Result<(), DatastoreError> {
+        for (key, value) in view.maps {
+            self.add_primitive(&key, Timepoint::now(), value);
+        }
+        Ok(())
+    }
+}
+
+// ----------------------------
+// Listener Implementations
+// ----------------------------
+impl Datastore {
+    pub fn add_listener(
+        &mut self,
+        topic_query: &TopicKey,
+        listener: Arc<Mutex<dyn DataStoreListener>>,
+    ) -> Result<(), DatastoreError> {
+        debug!(
+            "[DB/add_listener] Adding listener for topic: {:?}",
+            topic_query
+        );
+        self.listeners
+            .entry(topic_query.clone().handle())
+            .or_insert_with(Vec::new)
+            .push(listener.clone());
+        Ok(())
+    }
+
+    pub fn notify_datapoints(&mut self, datapoints: Vec<Datapoint>) {
+        for (filter, listeners) in self.listeners.iter_mut() {
+            for datapoint in datapoints.iter() {
+                if datapoint.topic.key().matches(filter) {
+                    for listener in listeners.iter_mut() {
+                        listener.lock().unwrap().on_datapoint(datapoint);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn notify_bucket_updates(&mut self, _buckets: Vec<BucketHandle>) {}
+}
+
+/// ----------------------------
+/// Sync Implementations
+/// ----------------------------
+impl Datastore {
+    pub fn setup_sync(&mut self, config: SyncConfig, adapter: SyncAdapterHandle) {
+        let ds_sync = DatastoreSync::new(config.clone(), adapter).as_handle();
+        self.sync = Some(ds_sync.clone());
+
+        self.add_listener(&TopicKey::empty(), ds_sync.clone());
+    }
+
+    pub fn run_sync(&mut self) {
+        if let Some(sync) = self.sync.as_mut() {
+            sync.lock().unwrap().sync();
+            let datapoints = sync.lock().unwrap().drain_new_datapoints();
+            if !datapoints.is_empty() {
+                debug!("[Datastore/Sync] Got {} new datapoints", datapoints.len());
+                self.add_datapoints_silent(datapoints);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use log::debug;
 
-    use crate::{buckets::listener::MockBucketListener, database::*};
+    use crate::database::*;
 
     #[test]
     pub fn test_datastore_creation() {
@@ -590,29 +519,5 @@ mod tests {
 
         let result: TestStructB = new_datastore.get_struct(&topic_b).unwrap();
         assert_eq!(result, test_struct_b);
-    }
-
-    #[test]
-    pub fn test_datastore_add_listener() {
-        let mut datastore = Datastore::new();
-        let topic_a = TopicKey::from_str("test/topic/a");
-        let topic_b = TopicKey::from_str("test/topic/b");
-        datastore.create_bucket(&topic_a);
-        datastore.create_bucket(&topic_b);
-
-        let listener = MockBucketListener::default().as_handle();
-        let broad_topic = TopicKey::from_str("test/topic");
-        datastore
-            .add_listener(&broad_topic, listener.clone())
-            .unwrap();
-
-        // Write value to bucker a and b
-        datastore.add_primitive(&topic_a, Timepoint::now(), 42.into());
-        datastore.add_primitive(&topic_b, Timepoint::now(), 42.into());
-
-        let updates = listener.lock().unwrap().updates.clone();
-        assert_eq!(updates.len(), 2);
-        assert_eq!(updates[0].topic.key(), topic_a.key());
-        assert_eq!(updates[1].topic.key(), topic_b.key());
     }
 }

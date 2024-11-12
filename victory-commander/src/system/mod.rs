@@ -2,7 +2,7 @@ use std::{
     collections::BTreeSet,
     sync::{Arc, Mutex},
 };
-use victory_data_store::database::DataView;
+use victory_data_store::database::view::DataView;
 use victory_data_store::topics::TopicKey;
 use victory_wtf::Timespan;
 
