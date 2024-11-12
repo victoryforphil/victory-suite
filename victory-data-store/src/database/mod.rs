@@ -11,13 +11,13 @@ use crate::{
 use listener::DataStoreListener;
 use log::{debug, info, trace, warn};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use view::DataView;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
 use victory_wtf::Timepoint;
-use view::DataView;
 
 pub type DatastoreHandle = Arc<Mutex<Datastore>>;
 
@@ -186,9 +186,10 @@ impl Datastore {
     /// Add datapoints without notifying listeners, usually used when receiving remote datapoints
     /// that we want to store without triggering any local listeners
     pub fn add_datapoints_silent(&mut self, datapoints: Vec<Datapoint>) {
-        for datapoint in datapoints {
+        for datapoint in datapoints.clone() {
             self.add_primitive(&datapoint.topic, datapoint.time, datapoint.value);
         }
+        self.notify_raw_datapoints(datapoints);
     }
 
     pub fn add_datapoints(&mut self, datapoints: Vec<Datapoint>) {
@@ -264,9 +265,11 @@ impl Datastore {
     }
 
     pub fn apply_view(&mut self, view: DataView) -> Result<(), DatastoreError> {
+        let mut datapoints = Vec::new();
         for (key, value) in view.maps {
-            self.add_primitive(&key, Timepoint::now(), value);
+            datapoints.push(Datapoint::new(&key, Timepoint::now(), value));
         }
+        self.add_datapoints(datapoints);
         Ok(())
     }
 }
@@ -297,6 +300,19 @@ impl Datastore {
                 if datapoint.topic.key().matches(filter) {
                     for listener in listeners.iter_mut() {
                         listener.lock().unwrap().on_datapoint(datapoint);
+                        listener.lock().unwrap().on_raw_datapoint(datapoint);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn notify_raw_datapoints(&mut self, datapoints: Vec<Datapoint>) {
+        for (filter, listeners) in self.listeners.iter_mut() {
+            for datapoint in datapoints.iter() {
+                if datapoint.topic.key().matches(filter) {
+                    for listener in listeners.iter_mut() {
+                        listener.lock().unwrap().on_raw_datapoint(datapoint);
                     }
                 }
             }
@@ -325,6 +341,8 @@ impl Datastore {
                 debug!("[Datastore/Sync] Got {} new datapoints", datapoints.len());
                 self.add_datapoints_silent(datapoints);
             }
+        } else {
+            warn!("[Datastore/Sync] No sync handler set up");
         }
     }
 }

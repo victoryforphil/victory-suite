@@ -2,8 +2,7 @@ use std::{
     collections::BTreeSet,
     sync::{Arc, Mutex},
 };
-use victory_data_store::database::view::DataView;
-use victory_data_store::topics::TopicKey;
+use victory_data_store::{database::view::DataView, topics::TopicKey};
 use victory_wtf::Timespan;
 
 /// Trait that defines a commander system that can be run by the commander.

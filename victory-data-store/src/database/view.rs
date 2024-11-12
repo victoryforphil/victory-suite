@@ -127,7 +127,7 @@ mod tests {
     use victory_wtf::Timepoint;
 
     use crate::{
-        database::{view::DataView, Datastore},
+        database::{database::view::DataView, Datastore},
         topics::TopicKey,
     };
 

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use log::{debug, info};
+use log::{debug, info, warn};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{oneshot, Mutex, RwLock},
@@ -80,7 +80,13 @@ impl SyncAdapter for TcpSyncServer {
         &mut self,
     ) -> Result<Vec<crate::sync::packet::SyncMessage>, crate::sync::adapters::AdapterError> {
         let mut messages = Vec::new();
-        let connections = self.connections.try_lock().unwrap();
+        let connections = match self.connections.try_lock() {
+            Ok(connections) => connections,
+            Err(e) => {
+                warn!("[Sync/TcpServer] Failed to lock connections: {:?}", e);
+                return Ok(Vec::new());
+            }
+        };
         for connection in connections.iter() {
             while let Ok(message) = connection.try_lock().unwrap().recv_rx.try_recv() {
                 messages.push(message);
@@ -104,7 +110,7 @@ impl SyncAdapter for TcpSyncServer {
                 for connection in connections.iter() {
                     let mut conn = connection.try_lock().unwrap();
                     conn.welcomed = true;
-                    conn.send_tx.try_send(message.clone()).unwrap();
+                    conn.send_tx.try_send(message.clone());
                 }
             } else {
                 // Send to specific connection

@@ -70,11 +70,7 @@ impl BasherSysRunner {
         self.end_time = Some(end_time);
     }
     pub fn enable_pubsub(&mut self, adapter: PubSubAdapterHandle) {
-        self.pubsub_node = Some(Node::new(
-            "Commander PubSub Node".to_string(),
-            adapter,
-            self.data_store.clone(),
-        ));
+
     }
     pub fn add_system(&mut self, system: SystemHandle) {
         self.systems.push(system);
@@ -92,22 +88,6 @@ impl BasherSysRunner {
             system.lock().unwrap().init();
         }
 
-        // If we have a pubsub node, subscribe to all topics
-        if let Some(node) = &mut self.pubsub_node {
-            for system in self.systems.iter_mut() {
-                let sub = system.lock().unwrap().get_subscribed_topics();
-                for topic in sub.iter() {
-                    debug!("Adding pubsub runner callback for topic {:?}", topic);
-                    let bucket = self.data_store.lock().unwrap().get_or_create_bucket(topic);
-                    let callback = RunnerPubSubCallback::new(bucket);
-                    let callback = Arc::new(Mutex::new(callback));
-                    self.pubsub_callbacks
-                        .insert(topic.handle().clone(), callback.clone());
-                    node.add_sub_callback(topic.handle(), callback);
-                }
-            }
-        }
-
         let end_time = match &self.end_time {
             Some(end_time) => {
                 info!("Running main loop for {:?}", end_time);
@@ -119,10 +99,6 @@ impl BasherSysRunner {
             }
         };
         while self.current_time < end_time {
-            if let Some(node) = &mut self.pubsub_node {
-                node.tick();
-            }
-
             let start_time = Timepoint::now();
             for system in self.systems.iter_mut() {
                 let mut system = system.lock().unwrap();
@@ -159,6 +135,7 @@ impl BasherSysRunner {
             }
 
             self.current_time = self.current_time.clone() + self.dt.clone();
+            self.data_store.lock().unwrap().run_sync();
         }
         info!("Finished running main loop");
     }

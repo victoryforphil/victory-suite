@@ -91,6 +91,8 @@ impl DatastoreSync {
             subscription
         );
         self.remote_subscriptions.push(subscription);
+
+        // Send all current datapoints to the new subscriber
     }
 
     pub fn sync(&mut self) {
@@ -107,21 +109,31 @@ impl DatastoreSync {
             }
         }
 
-        let new_clients = self.adapter.lock().unwrap().read().unwrap();
         let mut datapoints = Vec::new();
-        for message in new_clients {
-            match message.msg.clone() {
-                SyncMessageType::Register(register) => {
-                    self.remote_subscribe(Subscription::from_register(&message));
-                }
-                SyncMessageType::Update(update) => {
-                    debug!("[Sync/Sync] Got {} new datapoints", update.datapoints.len());
-                    datapoints.extend(update.datapoints);
-                }
-                _ => {}
+        let mut update_count = 0;
+        let mut read_result = self.adapter.lock().unwrap().read();
+        while let Ok(messages) = &read_result {
+            if messages.is_empty() {
+                break;
             }
+            for message in messages {
+                match message.msg.clone() {
+                    SyncMessageType::Register(register) => {
+                        self.remote_subscribe(Subscription::from_register(message));
+                    }
+                    SyncMessageType::Update(update) => {
+                        update_count += update.datapoints.len();
+                        datapoints.extend(update.datapoints);
+                    }
+                    _ => {}
+                }
+            }
+            read_result = self.adapter.lock().unwrap().read();
         }
-        self.on_remote_datapoints(datapoints);
+        if update_count > 0 {
+            debug!("[Sync/Sync] Got {} new datapoints", update_count);
+            self.on_remote_datapoints(datapoints);
+        }
         self.send_queued_datapoints();
     }
 
