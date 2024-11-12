@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use log::{debug, info, warn};
 use tokio::{
-    io::AsyncReadExt,
+    io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
     sync::{mpsc, Mutex},
 };
@@ -92,8 +92,8 @@ impl TcpSyncConnection {
         tokio::spawn(async move {
             while let Some(message) = send_rx.recv().await {
                 let data = rmp_serde::to_vec_named(&message).unwrap();
-                if let Err(e) = write_half.try_write(&data) {
-                    log::error!("Failed to write to stream: {}", e);
+                if let Err(e) = write_half.write_all(&data).await {
+                    warn!("[Sync/TcpConnection] Failed to write to stream: {}", e);
                     break;
                 }
             }

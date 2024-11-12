@@ -68,7 +68,9 @@ impl SyncAdapter for TCPClient {
         let message = connection.recv_rx.try_recv();
         match message {
             Ok(message) => messages.push(message),
-            Err(e) => {}
+            Err(e) => {
+                return Ok(Vec::new());
+            }
         }
         Ok(messages)
     }
