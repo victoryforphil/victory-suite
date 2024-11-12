@@ -13,7 +13,7 @@ use victory_data_store::{
         adapters::tcp::{tcp_client::TCPClient, tcp_server::TcpSyncServer},
         config::SyncConfig,
     },
-    test_util::BigState,
+    test_util::{BigState, BigStateVector},
     topics::TopicKey,
 };
 use victory_wtf::{Timepoint, Timespan};
@@ -51,21 +51,35 @@ async fn main() {
 
     let sync_config = SyncConfig {
         client_name: "TCP Sync Client".to_string(),
-        subscriptions: vec![],
+        subscriptions: vec![topic_filter.display_name()],
+    
     };
     datastore
         .lock()
         .unwrap()
         .setup_sync(sync_config, client_handle);
-    let topic = TopicKey::from_str("test");
+    let topic = TopicKey::from_str("test/client");
+    let mut test_struct = BigStateVector::default();
+
+    let server_topic = TopicKey::from_str("test/server");
+
     loop {
         tokio::time::sleep(Duration::from_secs_f32(1.0)).await;
         datastore.lock().unwrap().run_sync();
+        test_struct.x += 1.0;
+        test_struct.y += 2.0;
+        test_struct.z += 3.0;
         // Write a message to the topic
-        let test_struct = BigState::new();
         datastore
             .lock()
             .unwrap()
             .add_struct(&topic, Timepoint::now(), test_struct);
+
+        // Read server struct from topic
+        let value: Result<BigStateVector, _> = datastore.lock().unwrap().get_struct(&server_topic);
+        match value {
+            Ok(state) => info!("Server state: {:?}", state),
+            Err(e) => {}
+        }
     }
 }
