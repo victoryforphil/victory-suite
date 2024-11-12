@@ -147,7 +147,10 @@ impl PubSubChannel {
 
         // if queue is over 2048, drop older 512
         if self.recv_queue.len() > 2048 {
-            warn!("PubSubChannel #{} recv queue overflow, dropping 512 datapoints", self.id);
+            warn!(
+                "PubSubChannel #{} recv queue overflow, dropping 512 datapoints",
+                self.id
+            );
             self.recv_queue.drain(..512);
         }
     }
@@ -177,10 +180,12 @@ impl PubSubChannel {
             self.id, datapoint.topic
         );
 
-
         // if queue is over 2048, drop older 512
         if self.send_queue.len() > 2048 {
-            warn!("PubSubChannel #{} send queue overflow, dropping 512 datapoints", self.id);
+            warn!(
+                "PubSubChannel #{} send queue overflow, dropping 512 datapoints",
+                self.id
+            );
             self.send_queue.drain();
         }
 

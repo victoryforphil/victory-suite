@@ -25,4 +25,3 @@ pub enum Primitives {
     Reference(TopicIDType),
     StructType(String),
 }
-

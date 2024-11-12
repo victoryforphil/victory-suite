@@ -19,7 +19,6 @@ use victory_wtf::Timepoint;
 
 use super::{listener::DataStoreListener, Datastore, DatastoreError};
 
-
 #[derive(Debug, Clone)]
 pub struct DataView {
     pub maps: HashMap<TopicKey, Primitives>,
@@ -121,16 +120,16 @@ impl DataView {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use log::debug;
     use serde::{Deserialize, Serialize};
     use victory_wtf::Timepoint;
 
-
-    use crate::{database::{view::DataView, Datastore}, topics::TopicKey};
-
+    use crate::{
+        database::{view::DataView, Datastore},
+        topics::TopicKey,
+    };
 
     #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
     struct TestStructA {
@@ -201,5 +200,4 @@ mod tests {
         let result: TestStructB = new_datastore.get_struct(&topic_b).unwrap();
         assert_eq!(result, test_struct_b);
     }
-
 }

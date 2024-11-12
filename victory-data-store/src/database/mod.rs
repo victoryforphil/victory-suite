@@ -1,19 +1,23 @@
 use crate::{
-    buckets::{Bucket, BucketHandle}, datapoints::Datapoint, primitives::{
+    buckets::{Bucket, BucketHandle},
+    datapoints::Datapoint,
+    primitives::{
         serde::{deserializer::PrimitiveDeserializer, serialize::to_map},
         Primitives,
-    }, sync::{config::SyncConfig, DatastoreSync, DatastoreSyncHandle, SyncAdapterHandle}, topics::{TopicKey, TopicKeyHandle, TopicKeyProvider}
+    },
+    sync::{config::SyncConfig, DatastoreSync, DatastoreSyncHandle, SyncAdapterHandle},
+    topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
 use listener::DataStoreListener;
 use log::{debug, info, trace, warn};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use view::DataView;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
 use victory_wtf::Timepoint;
+use view::DataView;
 
 pub type DatastoreHandle = Arc<Mutex<Datastore>>;
 
@@ -23,7 +27,7 @@ pub mod view;
 pub struct Datastore {
     buckets: HashMap<TopicKeyHandle, BucketHandle>,
     listeners: HashMap<TopicKeyHandle, Vec<Arc<Mutex<dyn DataStoreListener>>>>,
-    sync: Option<DatastoreSyncHandle>,
+    pub sync: Option<DatastoreSyncHandle>,
 }
 
 #[derive(Error, Debug)]
@@ -52,8 +56,6 @@ impl Datastore {
     pub fn handle(self) -> DatastoreHandle {
         Arc::new(Mutex::new(self))
     }
-
-
 
     pub fn create_bucket<T: TopicKeyProvider>(&mut self, topic: &T) {
         if !self.buckets.contains_key(&topic.handle()) {
@@ -155,11 +157,14 @@ impl Datastore {
         let value_map = to_map(&value)
             .map_err(|e| DatastoreError::Generic(format!("Error serializing struct: {:?}", e)))?;
 
+        let mut datapoints = Vec::new();
         for (key, value) in value_map {
             let full_key = key.add_prefix(topic.key().to_owned());
+            let datapoint = Datapoint::new(&full_key, time.clone(), value);
             // Remove the leading slash
-            self.add_primitive(&full_key, time.clone(), value);
+            datapoints.push(datapoint);
         }
+        self.add_datapoints(datapoints);
         Ok(())
     }
 
@@ -172,12 +177,10 @@ impl Datastore {
         let topic = topic.handle();
         let time = time.clone();
         self.create_bucket(&topic);
-        
 
         let bucket = self.buckets.get_mut(&topic).unwrap();
-    
-        bucket.write().unwrap().add_primitive(time, value);
 
+        bucket.write().unwrap().add_primitive(time, value);
     }
 
     /// Add datapoints without notifying listeners, usually used when receiving remote datapoints
@@ -189,10 +192,10 @@ impl Datastore {
     }
 
     pub fn add_datapoints(&mut self, datapoints: Vec<Datapoint>) {
-        for datapoint in datapoints {
-            self.notify_datapoints(vec![datapoint.clone()]);
+        for datapoint in datapoints.clone() {
             self.add_primitive(&datapoint.topic, datapoint.time, datapoint.value);
         }
+        self.notify_datapoints(datapoints);
     }
 
     pub fn get_latest_primitive<T: TopicKeyProvider>(&self, topic: &T) -> Option<Primitives> {
@@ -277,17 +280,22 @@ impl Datastore {
         topic_query: &TopicKey,
         listener: Arc<Mutex<dyn DataStoreListener>>,
     ) -> Result<(), DatastoreError> {
-        self.listeners.entry(topic_query.clone().handle()).or_insert_with(Vec::new).push(listener.clone());
+        debug!(
+            "[DB/add_listener] Adding listener for topic: {:?}",
+            topic_query
+        );
+        self.listeners
+            .entry(topic_query.clone().handle())
+            .or_insert_with(Vec::new)
+            .push(listener.clone());
         Ok(())
     }
 
     pub fn notify_datapoints(&mut self, datapoints: Vec<Datapoint>) {
-        trace!("Notifying {} listeners of {} datapoints", self.listeners.len(), datapoints.len());  
         for (filter, listeners) in self.listeners.iter_mut() {
             for datapoint in datapoints.iter() {
                 if datapoint.topic.key().matches(filter) {
                     for listener in listeners.iter_mut() {
-                        trace!("[DB/notify] Notifying listener {:?} of topic {:?}", listener, datapoint.topic.key());
                         listener.lock().unwrap().on_datapoint(datapoint);
                     }
                 }
@@ -295,22 +303,30 @@ impl Datastore {
         }
     }
 
-    pub fn notify_bucket_updates(&mut self, _buckets: Vec<BucketHandle>) {
-       
-    }
+    pub fn notify_bucket_updates(&mut self, _buckets: Vec<BucketHandle>) {}
 }
- 
+
 /// ----------------------------
 /// Sync Implementations
 /// ----------------------------
-impl Datastore{
-    pub fn setup_sync(&mut self, config: SyncConfig,adapter: SyncAdapterHandle){
-        let ds_sync = DatastoreSync::new(config, adapter).as_handle();
+impl Datastore {
+    pub fn setup_sync(&mut self, config: SyncConfig, adapter: SyncAdapterHandle) {
+        let ds_sync = DatastoreSync::new(config.clone(), adapter).as_handle();
         self.sync = Some(ds_sync.clone());
-        
-       
+
+        self.add_listener(&TopicKey::empty(), ds_sync.clone());
     }
 
+    pub fn run_sync(&mut self) {
+        if let Some(sync) = self.sync.as_mut() {
+            sync.lock().unwrap().sync();
+            let datapoints = sync.lock().unwrap().drain_new_datapoints();
+            if !datapoints.is_empty() {
+                debug!("[Datastore/Sync] Got {} new datapoints", datapoints.len());
+                self.add_datapoints_silent(datapoints);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -504,5 +520,4 @@ mod tests {
         let result: TestStructB = new_datastore.get_struct(&topic_b).unwrap();
         assert_eq!(result, test_struct_b);
     }
-
 }

@@ -4,7 +4,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-
 pub trait DataStoreListener: Send {
     fn on_datapoint(&mut self, datapoint: &Datapoint);
     fn on_bucket_update(&mut self, bucket: &BucketHandle);
@@ -59,17 +58,18 @@ impl DataStoreListener for MockDataStoreListener {
     fn get_filter(&self) -> Option<TopicKey> {
         Some(self.filter.clone())
     }
-    
-    fn on_bucket_update(&mut self, bucket: &BucketHandle) {
 
-    }
+    fn on_bucket_update(&mut self, bucket: &BucketHandle) {}
 }
 
 #[cfg(test)]
 mod tests {
     use victory_wtf::{Timecode, Timepoint};
 
-    use crate::{buckets::Bucket, database::Datastore, primitives::Primitives, sync::adapters::mock::MockSyncAdapter, topics::TopicKeyProvider};
+    use crate::{
+        buckets::Bucket, database::Datastore, primitives::Primitives,
+        sync::adapters::mock::MockSyncAdapter, topics::TopicKeyProvider,
+    };
 
     use super::*;
 
@@ -84,22 +84,20 @@ mod tests {
         let listener = MockDataStoreListener::new(filter.clone());
         let listener = listener.as_handle();
 
-        datastore
-            .add_listener(&filter, listener.clone())
-            .unwrap();
+        datastore.add_listener(&filter, listener.clone()).unwrap();
 
         // Write value to bucket a and b
         datastore.add_datapoints(vec![
             Datapoint {
                 topic: topic_a.handle(),
                 time: Timepoint::now(),
-                value: 42.into()
+                value: 42.into(),
             },
             Datapoint {
-                topic: topic_b.handle(), 
+                topic: topic_b.handle(),
                 time: Timepoint::now(),
-                value: 42.into()
-            }
+                value: 42.into(),
+            },
         ]);
 
         let updates = listener.lock().unwrap().updates.clone();
@@ -107,5 +105,4 @@ mod tests {
         assert_eq!(updates[0].topic.key(), &topic_a);
         assert_eq!(updates[1].topic.key(), &topic_b);
     }
-
 }

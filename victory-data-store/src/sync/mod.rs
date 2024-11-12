@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use adapters::SyncAdapter;
 use config::SyncConfig;
-use log::debug;
-use packet::SyncRegisterMessage;
+use log::{debug, info};
+use packet::{SyncMessage, SyncMessageType, SyncRegisterMessage, SyncUpdateMessage};
 use subscription::Subscription;
 
 use crate::{
@@ -39,6 +39,8 @@ pub struct DatastoreSync {
     /// Represents all subscriptions that we locally want to receive updates for
     /// from the remote datastore
     local_subscriptions: Vec<Subscription>,
+
+    new_datapoints: Vec<Datapoint>,
 }
 
 impl DatastoreSync {
@@ -52,6 +54,7 @@ impl DatastoreSync {
             adapter,
             remote_subscriptions: Vec::new(),
             local_subscriptions: Vec::new(),
+            new_datapoints: Vec::new(),
         };
         new_sync.subscribe_from_strings(config.subscriptions.clone());
         new_sync
@@ -83,23 +86,108 @@ impl DatastoreSync {
     /// Called externally to handle a new remote subscription registration
     /// This should be called once a new remote client has subscribed to a channel
     pub fn remote_subscribe(&mut self, subscription: Subscription) {
+        debug!(
+            "[Sync/RemoteSubscribe] New remote subscription: {:?}",
+            subscription
+        );
         self.remote_subscriptions.push(subscription);
+    }
+
+    pub fn sync(&mut self) {
+        // Get any anon connections and send them a welcome message
+        let anon_connections = self.adapter.lock().unwrap().get_anon_connections();
+        let local_subscriptions = self.local_subscriptions.clone();
+        for connection_id in anon_connections {
+            for local_sub in local_subscriptions.iter() {
+                info!(
+                    "[Sync/Sync] Re-sending register message to new connection: {:?}",
+                    connection_id
+                );
+                self.send_register_subscriptions(&local_sub);
+            }
+        }
+
+        let new_clients = self.adapter.lock().unwrap().read().unwrap();
+        let mut datapoints = Vec::new();
+        for message in new_clients {
+            match message.msg.clone() {
+                SyncMessageType::Register(register) => {
+                    self.remote_subscribe(Subscription::from_register(&message));
+                }
+                SyncMessageType::Update(update) => {
+                    debug!("[Sync/Sync] Got {} new datapoints", update.datapoints.len());
+                    datapoints.extend(update.datapoints);
+                }
+                _ => {}
+            }
+        }
+        self.on_remote_datapoints(datapoints);
+        self.send_queued_datapoints();
     }
 
     /// Called externally to handle new local datapoints updates that should be sent out to any
     /// subscriptions that match the datapoint.
-    pub fn on_local_datapoints(&mut self, datapoints: Vec<Datapoint>) {}
+    pub fn on_local_datapoints(&mut self, datapoints: Vec<Datapoint>) {
+        // For each datapoint, find all subscriptions that match and send the update
+        for datapoint in datapoints {
+            let matching_subscriptions: Vec<&mut Subscription> = self
+                .remote_subscriptions
+                .iter_mut()
+                .filter(|sub| sub.is_match(&datapoint))
+                .collect();
+            for sub in matching_subscriptions {
+                sub.push(datapoint.clone());
+            }
+        }
+    }
 
     /// Called once a new remote datapoint has been received and should be stored in the local datastore
-    pub fn on_remote_datapoints(&mut self, datapoints: Vec<Datapoint>) {}
+    pub fn on_remote_datapoints(&mut self, datapoints: Vec<Datapoint>) {
+        self.new_datapoints.extend(datapoints);
+    }
+
+    pub fn drain_new_datapoints(&mut self) -> Vec<Datapoint> {
+        self.new_datapoints.drain(..).collect()
+    }
 }
 
 impl DatastoreSync {
     fn send_register_subscriptions(&mut self, subscription: &Subscription) {
-        let mut message = SyncRegisterMessage::new(subscription.sub_id, vec![subscription.topic_query.display_name()]);
+        let mut message = SyncMessage::new_register(
+            subscription.sub_id,
+            vec![subscription.topic_query.display_name()],
+        );
         message.client_name = Some(self.config.client_name.clone());
         debug!("[Sync/Register] Sending register message: {:?}", message);
-        self.adapter.lock().unwrap().register_client(message);
+
+        self.adapter.lock().unwrap().write(vec![message]).unwrap();
+    }
+
+    fn send_pure_register(&mut self) {
+        let message = SyncMessage::new_register(0, vec![]);
+
+        debug!(
+            "[Sync/Register] Sending pure register message: {:?}",
+            message
+        );
+
+        self.adapter.lock().unwrap().write(vec![message]).unwrap();
+    }
+
+    fn send_queued_datapoints(&mut self) {
+        for sub in self.remote_subscriptions.iter_mut() {
+            if sub.len() > 0 {
+                let mut datapoints = Vec::new();
+                while let Some(datapoint) = sub.pop() {
+                    datapoints.push(datapoint);
+                }
+
+                for batch in datapoints.chunks(8) {
+                    let message = SyncMessage::new_update(sub.sub_id, batch.to_vec());
+                    self.adapter.lock().unwrap().write(vec![message]).unwrap();
+                }
+            }
+        }
     }
 }
 
@@ -111,7 +199,6 @@ impl DataStoreListener for DatastoreSync {
     fn on_bucket_update(&mut self, bucket: &crate::buckets::BucketHandle) {}
 }
 
-
 #[cfg(test)]
 mod tests {
     use adapters::mock::MockSyncAdapter;
@@ -119,24 +206,62 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_datastore_setup_sync(){
+    fn test_datastore_setup_sync() {
         env_logger::init();
         let mut datastore = Datastore::new().handle();
         let mut mock_adapter = MockSyncAdapter::new().as_handle();
 
-        let mut sync_config = SyncConfig{
+        let mut sync_config = SyncConfig {
             client_name: "test_client".to_string(),
             subscriptions: vec!["test_topic".to_string()],
         };
 
-        datastore.lock().unwrap().setup_sync(sync_config, mock_adapter.clone());
+        datastore
+            .lock()
+            .unwrap()
+            .setup_sync(sync_config, mock_adapter.clone());
 
         // Check that the adapter recieved a register message
-        let register_message = mock_adapter.lock().unwrap().get_new_clients();
-        assert!(register_message.is_ok());
-        let register_message = register_message.unwrap();
+        let register_message = mock_adapter.lock().unwrap().read().unwrap();
         assert_eq!(register_message.len(), 1);
-        assert_eq!(register_message[0].client_name, Some("test_client".to_string()));
-        assert_eq!(register_message[0].subscriptions, vec!["test_topic".to_string()]);
+        assert_eq!(
+            register_message[0].client_name,
+            Some("test_client".to_string())
+        );
+        assert_eq!(
+            register_message[0].try_as_register().unwrap().subscriptions,
+            vec!["test_topic".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_datastore_read_new_clients() {
+        env_logger::init();
+        let mut datastore = Datastore::new().handle();
+        let mut mock_adapter = MockSyncAdapter::new().as_handle();
+
+        let mut sync_config = SyncConfig {
+            client_name: "test_client".to_string(),
+            subscriptions: vec!["test_topic".to_string()],
+        };
+
+        datastore
+            .lock()
+            .unwrap()
+            .setup_sync(sync_config, mock_adapter.clone());
+
+        datastore.lock().unwrap().run_sync();
+
+        let sync = datastore.lock().unwrap().sync.clone().unwrap();
+        let sync = sync.lock().unwrap();
+        assert_eq!(sync.remote_subscriptions.len(), 1);
+        assert_eq!(
+            sync.remote_subscriptions[0].client_name,
+            "test_client".to_string()
+        );
+        assert_eq!(
+            sync.remote_subscriptions[0].topic_query.display_name(),
+            "test_topic"
+        );
     }
 }

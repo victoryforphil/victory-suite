@@ -12,7 +12,6 @@ use crate::{
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
 
-
 #[derive(Debug)]
 /// A bucket is a collection of datapoints for a specific topic
 pub struct Bucket {
@@ -26,7 +25,7 @@ impl Bucket {
     pub fn new<T: TopicKeyProvider>(topic: &T) -> BucketHandle {
         Arc::new(RwLock::new(Bucket {
             topic: topic.handle(),
-            values: BTreeMap::new()
+            values: BTreeMap::new(),
         }))
     }
 
@@ -116,8 +115,6 @@ mod tests {
         primitives::Primitives,
         topics::{TopicKey, TopicKeyProvider},
     };
-
-
 
     #[test]
     fn test_bucket_creation() {
@@ -214,6 +211,4 @@ mod tests {
             );
         }
     }
-
-   
 }

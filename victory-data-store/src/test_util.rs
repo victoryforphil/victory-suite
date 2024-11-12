@@ -43,4 +43,11 @@ impl BigState {
             trajectory,
         }
     }
+
+    pub fn new_small() -> BigState {
+        BigState {
+            pose: BigStatePose::default(),
+            trajectory: HashMap::new(),
+        }
+    }
 }

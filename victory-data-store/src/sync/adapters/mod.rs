@@ -1,10 +1,14 @@
 pub mod mock;
-pub mod tonic;
+pub mod tcp;
 
-use std::{collections::HashMap, fmt::Debug, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    sync::{Arc, Mutex},
+};
 
 use super::{
-    packet::{SyncRegisterMessage, SyncUpdateMessage},
+    packet::{SyncMessage, SyncRegisterMessage, SyncUpdateMessage},
     SyncConnectionIDType,
 };
 
@@ -20,7 +24,7 @@ pub enum AdapterError {
     ReceiveError(String),
 }
 
-pub trait SyncAdapter: Debug + Send + Sync{
+pub trait SyncAdapter: Debug + Send + Sync {
     fn get_name(&self) -> String;
 
     fn get_description(&self) -> String {
@@ -31,18 +35,16 @@ pub trait SyncAdapter: Debug + Send + Sync{
         HashMap::new()
     }
 
-    fn get_connections(&self) -> Vec<SyncConnectionIDType>;
+    fn get_anon_connections(&self) -> Vec<SyncConnectionIDType>;
+
+    fn set_register_message(&mut self, message: SyncMessage) {}
 
     fn get_live(&self) -> bool {
         true
     }
 
-    fn read_updates(&mut self) -> Result<Vec<SyncUpdateMessage>, AdapterError>;
-    fn write_updates(&mut self, to_send: Vec<SyncUpdateMessage>) -> Result<(), AdapterError>;
-
-    fn register_client(&mut self, registration: SyncRegisterMessage) -> Result<(), AdapterError>;
-
-    fn get_new_clients(&mut self) -> Result<Vec<SyncRegisterMessage>, AdapterError>;
+    fn read(&mut self) -> Result<Vec<SyncMessage>, AdapterError>;
+    fn write(&mut self, to_send: Vec<SyncMessage>) -> Result<(), AdapterError>;
 }
 pub type SyncAdapterHandle = Arc<Mutex<dyn SyncAdapter + Send>>;
 
@@ -52,7 +54,9 @@ mod tests_sync_adapter {
 
     use super::*;
     use crate::{
-        datapoints::Datapoint, primitives::Primitives, sync::{adapters::mock::MockSyncAdapter, SyncSubscriptionIDType},
+        datapoints::Datapoint,
+        primitives::Primitives,
+        sync::{adapters::mock::MockSyncAdapter, SyncSubscriptionIDType},
         topics::TopicKey,
     };
 
@@ -71,17 +75,16 @@ mod tests_sync_adapter {
     #[test]
     fn test_mock_register_client() {
         let mut adapter = MockSyncAdapter::new();
-        let registration =
-            SyncRegisterMessage::new(get_random_sub_id(), vec!["test_topic".to_string()]);
-        adapter.register_client(registration.clone()).unwrap();
-        assert_eq!(adapter.get_new_clients().unwrap(), vec![registration.clone()]);
+        let msg = SyncMessage::new_register(vec!["test_topic".to_string()]);
+        adapter.register_client(msg).unwrap();
+        assert_eq!(adapter.get_new_clients().unwrap(), vec![msg]);
     }
 
     #[test]
     fn test_mock_read_write() {
         let mut adapter = MockSyncAdapter::new();
-        let message = SyncUpdateMessage::new(get_random_sub_id(), get_random_datapoints());
-        adapter.write_updates(vec![message.clone()]).unwrap();
+        let message = SyncMessage::new_update(get_random_sub_id(), get_random_datapoints());
+        adapter.write(vec![message.clone()]).unwrap();
 
         let read_messages = adapter.get_sent_messages();
         assert_eq!(read_messages.len(), 1);
