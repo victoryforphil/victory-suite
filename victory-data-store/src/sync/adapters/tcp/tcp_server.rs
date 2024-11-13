@@ -100,10 +100,6 @@ impl SyncAdapter for TcpSyncServer {
         to_send: Vec<crate::sync::packet::SyncMessage>,
     ) -> Result<(), crate::sync::adapters::AdapterError> {
         for message in to_send {
-            debug!(
-                "[Sync/TcpServer] Writing message to connections: {:?}",
-                message
-            );
             let connections = self.connections.try_lock().unwrap();
             if message.connection_id.is_none() {
                 // Send to all connections if no specific connection_id

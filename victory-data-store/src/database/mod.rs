@@ -5,29 +5,35 @@ use crate::{
         serde::{deserializer::PrimitiveDeserializer, serialize::to_map},
         Primitives,
     },
-    sync::{config::SyncConfig, DatastoreSync, DatastoreSyncHandle, SyncAdapterHandle},
+    sync::{
+        config::SyncConfig, subscription::Subscription, DatastoreSync, DatastoreSyncHandle,
+        SyncAdapterHandle,
+    },
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
 use listener::DataStoreListener;
 use log::{debug, info, trace, warn};
+use retention::RetentionPolicy;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use view::DataView;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
 use victory_wtf::Timepoint;
+use view::DataView;
 
 pub type DatastoreHandle = Arc<Mutex<Datastore>>;
 
 pub mod listener;
+pub mod retention;
 pub mod view;
 #[derive(Debug, Clone)]
 pub struct Datastore {
     buckets: HashMap<TopicKeyHandle, BucketHandle>,
     listeners: HashMap<TopicKeyHandle, Vec<Arc<Mutex<dyn DataStoreListener>>>>,
     pub sync: Option<DatastoreSyncHandle>,
+    pub retention: RetentionPolicy,
 }
 
 #[derive(Error, Debug)]
@@ -50,6 +56,7 @@ impl Datastore {
             listeners: HashMap::new(),
             buckets: HashMap::new(),
             sync: None,
+            retention: RetentionPolicy::default(),
         }
     }
 
@@ -57,10 +64,18 @@ impl Datastore {
         Arc::new(Mutex::new(self))
     }
 
+    pub fn set_retention(&mut self, retention: RetentionPolicy) {
+        self.retention = retention;
+    }
+
     pub fn create_bucket<T: TopicKeyProvider>(&mut self, topic: &T) {
         if !self.buckets.contains_key(&topic.handle()) {
             trace!("Creating new bucket for topic {:?}", topic.key());
             let bucket = Bucket::new(topic);
+            bucket
+                .write()
+                .unwrap()
+                .set_retention(self.retention.clone());
             self.buckets.insert(topic.handle().clone(), bucket);
         }
     }
@@ -173,30 +188,50 @@ impl Datastore {
         topic: &T,
         time: Timepoint,
         value: Primitives,
-    ) {
+    ) -> Result<usize, String> {
         let topic = topic.handle();
         let time = time.clone();
         self.create_bucket(&topic);
 
         let bucket = self.buckets.get_mut(&topic).unwrap();
-
-        bucket.write().unwrap().add_primitive(time, value);
+        bucket.write().unwrap().add_primitive(time, value)
     }
 
     /// Add datapoints without notifying listeners, usually used when receiving remote datapoints
     /// that we want to store without triggering any local listeners
     pub fn add_datapoints_silent(&mut self, datapoints: Vec<Datapoint>) {
-        for datapoint in datapoints.clone() {
-            self.add_primitive(&datapoint.topic, datapoint.time, datapoint.value);
+        let mut updated_datapoints = Vec::new();
+        for datapoint in datapoints {
+            let inserted_dp = datapoint.clone();
+            if let Ok(n) =
+                self.add_primitive(&inserted_dp.topic, inserted_dp.time, inserted_dp.value)
+            {
+                if n > 0 {
+                    updated_datapoints.push(datapoint.clone());
+                }
+            }
         }
-        self.notify_raw_datapoints(datapoints);
+        if !updated_datapoints.is_empty() {
+            self.notify_raw_datapoints(updated_datapoints);
+        }
     }
 
     pub fn add_datapoints(&mut self, datapoints: Vec<Datapoint>) {
+        let mut updated_datapoints = Vec::new();
         for datapoint in datapoints.clone() {
-            self.add_primitive(&datapoint.topic, datapoint.time, datapoint.value);
+            let inserted_dp = datapoint.clone();
+            if let Ok(n) =
+                self.add_primitive(&inserted_dp.topic, inserted_dp.time, inserted_dp.value)
+            {
+                if n > 0 {
+                    updated_datapoints.push(datapoint.clone());
+                }
+            }
         }
-        self.notify_datapoints(datapoints);
+        if !updated_datapoints.is_empty() {
+            self.notify_datapoints(updated_datapoints.clone());
+            self.notify_raw_datapoints(updated_datapoints);
+        }
     }
 
     pub fn get_latest_primitive<T: TopicKeyProvider>(&self, topic: &T) -> Option<Primitives> {
@@ -334,12 +369,29 @@ impl Datastore {
     }
 
     pub fn run_sync(&mut self) {
-        if let Some(sync) = self.sync.as_mut() {
-            sync.lock().unwrap().sync();
-            let datapoints = sync.lock().unwrap().drain_new_datapoints();
-            if !datapoints.is_empty() {
-                debug!("[Datastore/Sync] Got {} new datapoints", datapoints.len());
-                self.add_datapoints_silent(datapoints);
+        let sync = self.sync.clone();
+        if let Some(sync) = sync {
+            let new_subscriptions = sync.lock().unwrap().sync();
+
+            for sub in new_subscriptions {
+                let new_datapoints = self
+                    .get_latest_datapoints(&sub.topic_query)
+                    .unwrap()
+                    .clone();
+                debug!(
+                    "[Datastore/Sync] Sending {} latest datapoints to new subscriber: {:?}",
+                    new_datapoints.len(),
+                    sub.topic_query
+                );
+                self.notify_datapoints(new_datapoints);
+            }
+            let received_datapoints = sync.lock().unwrap().drain_new_datapoints();
+            if !received_datapoints.is_empty() {
+                debug!(
+                    "[Datastore/Sync] Received {} new datapoints",
+                    received_datapoints.len()
+                );
+                self.add_datapoints_silent(received_datapoints);
             }
         } else {
             warn!("[Datastore/Sync] No sync handler set up");

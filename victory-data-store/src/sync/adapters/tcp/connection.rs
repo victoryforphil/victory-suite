@@ -35,7 +35,7 @@ impl TcpSyncConnection {
         let (mut read_half, mut write_half) = stream.into_split();
         // Spawn read task
         tokio::spawn(async move {
-            let mut buffer = Vec::with_capacity(1024 * 50); // Increased to 50kb
+            let mut buffer = Vec::with_capacity(1024 * 5); // Increased to 50kb
             let mut temp_buffer = [0u8; 1024];
 
             loop {
@@ -75,7 +75,7 @@ impl TcpSyncConnection {
                         }
 
                         // Prevent buffer from growing too large
-                        if buffer.len() > 1024 * 50 {
+                        if buffer.len() > 1024 * 5 {
                             // Increased to 50kb
                             warn!("[Sync/TcpConnection] Buffer too large, clearing");
                             buffer.clear();
@@ -92,7 +92,8 @@ impl TcpSyncConnection {
         tokio::spawn(async move {
             while let Some(message) = send_rx.recv().await {
                 let data = rmp_serde::to_vec_named(&message).unwrap();
-                if let Err(e) = write_half.write_all(&data).await {
+
+                if let Err(e) = write_half.write(&data).await {
                     warn!("[Sync/TcpConnection] Failed to write to stream: {}", e);
                     break;
                 }

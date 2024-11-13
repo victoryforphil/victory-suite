@@ -69,9 +69,7 @@ impl BasherSysRunner {
     pub fn set_end_time(&mut self, end_time: Timepoint) {
         self.end_time = Some(end_time);
     }
-    pub fn enable_pubsub(&mut self, adapter: PubSubAdapterHandle) {
-
-    }
+    pub fn enable_pubsub(&mut self, adapter: PubSubAdapterHandle) {}
     pub fn add_system(&mut self, system: SystemHandle) {
         self.systems.push(system);
     }

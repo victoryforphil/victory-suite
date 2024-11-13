@@ -94,11 +94,12 @@ impl DatastoreSync {
 
         // Send all current datapoints to the new subscriber
     }
-
-    pub fn sync(&mut self) {
+    /// Returns new subscriptions that were added
+    pub fn sync(&mut self) -> Vec<Subscription> {
         // Get any anon connections and send them a welcome message
         let anon_connections = self.adapter.lock().unwrap().get_anon_connections();
         let local_subscriptions = self.local_subscriptions.clone();
+        let mut new_subscriptions = Vec::new();
         for connection_id in anon_connections {
             for local_sub in local_subscriptions.iter() {
                 info!(
@@ -119,7 +120,9 @@ impl DatastoreSync {
             for message in messages {
                 match message.msg.clone() {
                     SyncMessageType::Register(register) => {
-                        self.remote_subscribe(Subscription::from_register(message));
+                        let new_sub = Subscription::from_register(message);
+                        self.remote_subscribe(new_sub.clone());
+                        new_subscriptions.push(new_sub);
                     }
                     SyncMessageType::Update(update) => {
                         update_count += update.datapoints.len();
@@ -135,6 +138,7 @@ impl DatastoreSync {
             self.on_remote_datapoints(datapoints);
         }
         self.send_queued_datapoints();
+        new_subscriptions
     }
 
     /// Called externally to handle new local datapoints updates that should be sent out to any

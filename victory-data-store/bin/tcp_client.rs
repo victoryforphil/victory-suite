@@ -52,7 +52,6 @@ async fn main() {
     let sync_config = SyncConfig {
         client_name: "TCP Sync Client".to_string(),
         subscriptions: vec![topic_filter.display_name()],
-    
     };
     datastore
         .lock()

@@ -3,10 +3,11 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use log::{debug, trace};
+use log::{debug, info, trace, warn};
 use victory_wtf::Timepoint;
 
 use crate::{
+    database::retention::RetentionPolicy,
     datapoints::Datapoint,
     primitives::Primitives,
     topics::{TopicKeyHandle, TopicKeyProvider},
@@ -17,6 +18,7 @@ use crate::{
 pub struct Bucket {
     pub topic: TopicKeyHandle,
     pub values: BTreeMap<Timepoint, Datapoint>,
+    retention: RetentionPolicy,
 }
 
 pub type BucketHandle = Arc<RwLock<Bucket>>;
@@ -26,22 +28,60 @@ impl Bucket {
         Arc::new(RwLock::new(Bucket {
             topic: topic.handle(),
             values: BTreeMap::new(),
+            retention: RetentionPolicy::default(),
         }))
     }
 
-    pub fn add_primitive(&mut self, time: Timepoint, value: Primitives) {
+    pub fn set_retention(&mut self, retention: RetentionPolicy) {
+        debug!(
+            "Setting retention policy for bucket {:?}: {:?}",
+            self.topic.display_name(),
+            retention
+        );
+        self.retention = retention;
+    }
+
+    pub fn add_primitive(&mut self, time: Timepoint, value: Primitives) -> Result<usize, String> {
         let data_point = Datapoint {
             topic: self.topic.clone(),
             time: time.clone(),
             value,
         };
 
-        self.add_datapoint(data_point);
+        self.add_datapoint(data_point)
     }
 
-    pub fn add_datapoint(&mut self, data_point: Datapoint) {
+    pub fn add_datapoint(&mut self, data_point: Datapoint) -> Result<usize, String> {
         trace!("Adding datapoint: {}", self.topic);
-        self.values.insert(data_point.time.clone(), data_point);
+
+        // Check to see if we have stored too many datapoints
+        if let Some(max_rows) = self.retention.max_rows {
+            if self.values.len() >= max_rows {
+                // Drop max_rows / 2 datapoints
+                let drop_count = max_rows / 2;
+                info!(
+                    "Dropping {} datapoints from {:?} to stay within retention limit",
+                    drop_count,
+                    self.topic.display_name()
+                );
+                // Remove the first drop_count datapoints
+                for _ in 0..drop_count {
+                    self.values.pop_first();
+                }
+            }
+        }
+
+        // Only insert if value changed from previous
+        let should_insert = match self.get_latest_datapoint() {
+            Some(prev_value) => prev_value.value != data_point.value,
+            None => true, // Always insert first value
+        };
+
+        if should_insert {
+            self.values.insert(data_point.time.clone(), data_point);
+            return Ok(1);
+        }
+        Ok(0)
     }
 
     /// Update a datapoint in the bucket without notifying listeners
