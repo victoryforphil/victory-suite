@@ -92,12 +92,16 @@ impl PartialOrd for TopicKey {
 impl PartialEq for TopicKey {
     #[instrument(skip_all, name = "TopicKey::eq")]
     fn eq(&self, other: &Self) -> bool {
-        self.sections.len() == other.sections.len()
-            && self
-                .sections
-                .iter()
-                .zip(other.sections.iter())
-                .all(|(a, b)| a.id == b.id)
+        if self.sections.len() != other.sections.len() {
+            return false;
+        }
+        
+        for (a, b) in self.sections.iter().zip(other.sections.iter()) {
+            if a.id != b.id {
+                return false;
+            }
+        }
+        true
     }
 }
 pub type TopicKeyHandle = Arc<TopicKey>;
@@ -144,11 +148,21 @@ impl TopicKey {
     }
     #[instrument(skip_all)]
     pub fn display_name(&self) -> String {
-        self.sections
-            .iter()
-            .map(|s| s.display_name.to_string())
-            .collect::<Vec<String>>()
-            .join("/")
+        let mut result = String::with_capacity(
+            self.sections.iter().map(|s| s.display_name.len()).sum::<usize>() 
+            + self.sections.len().saturating_sub(1) // For separators
+        );
+        
+        let mut first = true;
+        for section in &self.sections {
+            if first {
+                first = false;
+            } else {
+                result.push('/');
+            }
+            result.push_str(&section.display_name);
+        }
+        result
     }
     #[instrument(skip_all, name = "TopicKey::to_string")]
     pub fn to_string(&self) -> String {

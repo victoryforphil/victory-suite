@@ -1,5 +1,5 @@
 use crate::{
-    buckets::Bucket,
+    buckets::{Bucket, BucketHandle},
     datapoints::Datapoint,
     primitives::{
         serde::{deserializer::PrimitiveDeserializer, serialize::to_map},
@@ -22,6 +22,7 @@ use super::{listener::DataStoreListener, Datastore, DatastoreError};
 #[derive(Debug, Clone)]
 pub struct DataView {
     pub maps: HashMap<TopicKey, Primitives>,
+    bucket_cache: HashMap<TopicKeyHandle, Vec<BucketHandle>>,
 }
 
 impl Default for DataView {
@@ -34,15 +35,16 @@ impl DataView {
     pub fn new() -> DataView {
         DataView {
             maps: HashMap::new(),
+            bucket_cache: HashMap::new(),
         }
     }
-
+    #[tracing::instrument(skip_all)]
     pub fn add_query(
         mut self,
-        datastore: &Datastore,
+        datastore: &mut Datastore,
         topic: &TopicKey,
     ) -> Result<DataView, DatastoreError> {
-        let buckets = datastore.get_buckets_matching(topic)?;
+        let buckets = datastore.get_buckets_matching_cached(topic)?;
         for bucket in buckets {
             let bucket = bucket.read().unwrap();
 
@@ -54,7 +56,7 @@ impl DataView {
 
         Ok(self)
     }
-
+    #[tracing::instrument(skip_all)]
     pub fn get_latest_map<T: TopicKeyProvider>(
         &self,
         topic: &T,
@@ -74,6 +76,7 @@ impl DataView {
             .collect::<HashMap<TopicKey, Primitives>>();
         Ok(map)
     }
+    #[tracing::instrument(skip_all)]
     pub fn get_latest<T: TopicKeyProvider, S: DeserializeOwned>(
         &self,
         topic: &T,
@@ -104,7 +107,7 @@ impl DataView {
             ))),
         }
     }
-
+    #[tracing::instrument(skip_all)]
     pub fn add_latest<T: TopicKeyProvider, S: Serialize>(
         &mut self,
         topic: &T,

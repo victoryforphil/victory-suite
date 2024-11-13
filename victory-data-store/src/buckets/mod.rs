@@ -31,7 +31,7 @@ impl Bucket {
             retention: RetentionPolicy::default(),
         }))
     }
-
+    #[tracing::instrument(skip_all)]
     pub fn set_retention(&mut self, retention: RetentionPolicy) {
         debug!(
             "Setting retention policy for bucket {:?}: {:?}",
@@ -40,7 +40,7 @@ impl Bucket {
         );
         self.retention = retention;
     }
-
+    #[tracing::instrument(skip_all)]
     pub fn add_primitive(&mut self, time: Timepoint, value: Primitives) -> Result<usize, String> {
         let data_point = Datapoint {
             topic: self.topic.clone(),
@@ -51,6 +51,7 @@ impl Bucket {
         self.add_datapoint(data_point)
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn add_datapoint(&mut self, data_point: Datapoint) -> Result<usize, String> {
         trace!("Adding datapoint: {}", self.topic);
 
@@ -85,26 +86,33 @@ impl Bucket {
     }
 
     /// Update a datapoint in the bucket without notifying listeners
+    #[tracing::instrument(skip_all)]
     pub fn update_datapoint(&mut self, data_point: Datapoint) {
         self.values.insert(data_point.time.clone(), data_point);
     }
 
+    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn get_latest_datapoint(&self) -> Option<&Datapoint> {
         self.values.iter().last().map(|(_, v)| v)
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_datapoints_ref(&self) -> Vec<&Datapoint> {
         self.values.values().collect()
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_datapoints(&self) -> Vec<Datapoint> {
         self.values.values().cloned().collect()
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_latest_value(&self) -> Option<&Primitives> {
         self.get_latest_datapoint().map(|d| &d.value)
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_values_after(&self, time: &Timepoint) -> Vec<&Primitives> {
         self.get_data_points_after(time)
             .iter()
@@ -112,6 +120,7 @@ impl Bucket {
             .collect()
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_values_before(&self, time: &Timepoint) -> Vec<&Primitives> {
         self.get_data_points_before(time)
             .iter()
@@ -119,6 +128,7 @@ impl Bucket {
             .collect()
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_updated_value(&self, time: &Timepoint) -> Option<&Primitives> {
         // Get the nearest value before the time
         let before = self
@@ -129,16 +139,19 @@ impl Bucket {
         before.or_else(|| self.get_latest_value())
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_updated_datapoint(&self, time: &Timepoint) -> Option<&Datapoint> {
         // Get the nearest value before the time
         let before = self.values.range(..time.clone()).last().map(|(_, v)| v);
         before.or_else(|| self.get_latest_datapoint())
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_data_points_after(&self, time: &Timepoint) -> Vec<&Datapoint> {
         self.values.range(time.clone()..).map(|(_, v)| v).collect()
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_data_points_before(&self, time: &Timepoint) -> Vec<&Datapoint> {
         self.values.range(..time.clone()).map(|(_, v)| v).collect()
     }

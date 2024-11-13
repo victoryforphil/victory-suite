@@ -59,13 +59,14 @@ impl DatastoreSync {
         new_sync.subscribe_from_strings(config.subscriptions.clone());
         new_sync
     }
-
+    #[tracing::instrument(skip_all)]
     pub fn as_handle(self) -> DatastoreSyncHandle {
         Arc::new(Mutex::new(self))
     }
 
     /// Given a topic filter, have this datastore subscribe to all topics that match the filter
     /// from remote datastores
+    #[tracing::instrument(skip_all)]
     pub fn subscribe(&mut self, topic_filter: TopicKey) {
         debug!(
             "[Sync/Subscribe] Subscribing to updates for: {:?}",
@@ -77,6 +78,7 @@ impl DatastoreSync {
     }
 
     /// Given an array of topic strings, subscribe to all topics that match the filter
+    #[tracing::instrument(skip_all)]
     pub fn subscribe_from_strings(&mut self, topic_filters: Vec<String>) {
         for topic_filter in topic_filters {
             self.subscribe(TopicKey::from_str(&topic_filter));
@@ -85,6 +87,7 @@ impl DatastoreSync {
 
     /// Called externally to handle a new remote subscription registration
     /// This should be called once a new remote client has subscribed to a channel
+    #[tracing::instrument(skip_all)]
     pub fn remote_subscribe(&mut self, subscription: Subscription) {
         debug!(
             "[Sync/RemoteSubscribe] New remote subscription: {:?}",
@@ -95,6 +98,7 @@ impl DatastoreSync {
         // Send all current datapoints to the new subscriber
     }
     /// Returns new subscriptions that were added
+    #[tracing::instrument(skip_all)]
     pub fn sync(&mut self) -> Vec<Subscription> {
         // Get any anon connections and send them a welcome message
         let anon_connections = self.adapter.lock().unwrap().get_anon_connections();
@@ -143,6 +147,7 @@ impl DatastoreSync {
 
     /// Called externally to handle new local datapoints updates that should be sent out to any
     /// subscriptions that match the datapoint.
+    #[tracing::instrument(skip_all)]
     pub fn on_local_datapoints(&mut self, datapoints: Vec<Datapoint>) {
         // For each datapoint, find all subscriptions that match and send the update
         for datapoint in datapoints {
@@ -158,16 +163,19 @@ impl DatastoreSync {
     }
 
     /// Called once a new remote datapoint has been received and should be stored in the local datastore
+    #[tracing::instrument(skip_all)]
     pub fn on_remote_datapoints(&mut self, datapoints: Vec<Datapoint>) {
         self.new_datapoints.extend(datapoints);
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn drain_new_datapoints(&mut self) -> Vec<Datapoint> {
         self.new_datapoints.drain(..).collect()
     }
 }
 
 impl DatastoreSync {
+    #[tracing::instrument(skip_all)]
     fn send_register_subscriptions(&mut self, subscription: &Subscription) {
         let mut message = SyncMessage::new_register(
             subscription.sub_id,
@@ -179,6 +187,7 @@ impl DatastoreSync {
         self.adapter.lock().unwrap().write(vec![message]).unwrap();
     }
 
+    #[tracing::instrument(skip_all)]
     fn send_pure_register(&mut self) {
         let message = SyncMessage::new_register(0, vec![]);
 
@@ -190,6 +199,7 @@ impl DatastoreSync {
         self.adapter.lock().unwrap().write(vec![message]).unwrap();
     }
 
+    #[tracing::instrument(skip_all)]
     fn send_queued_datapoints(&mut self) {
         for sub in self.remote_subscriptions.iter_mut() {
             if sub.len() > 0 {
@@ -208,10 +218,12 @@ impl DatastoreSync {
 }
 
 impl DataStoreListener for DatastoreSync {
+    #[tracing::instrument(skip_all)]
     fn on_datapoint(&mut self, datapoint: &crate::datapoints::Datapoint) {
         self.on_local_datapoints(vec![datapoint.clone()]);
     }
 
+    #[tracing::instrument(skip_all)]
     fn on_bucket_update(&mut self, bucket: &crate::buckets::BucketHandle) {}
 }
 

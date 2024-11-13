@@ -20,6 +20,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
+use tracing::{info_span, instrument, Instrument};
 use victory_wtf::Timepoint;
 use view::DataView;
 
@@ -34,6 +35,8 @@ pub struct Datastore {
     listeners: HashMap<TopicKeyHandle, Vec<Arc<Mutex<dyn DataStoreListener>>>>,
     pub sync: Option<DatastoreSyncHandle>,
     pub retention: RetentionPolicy,
+    /// Cache of topic searches and their resulting buckets
+    query_cache: HashMap<TopicKeyHandle, Vec<BucketHandle>>,
 }
 
 #[derive(Error, Debug)]
@@ -51,40 +54,52 @@ impl Default for Datastore {
 }
 
 impl Datastore {
+    #[instrument]
     pub fn new() -> Datastore {
         Datastore {
             listeners: HashMap::new(),
             buckets: HashMap::new(),
             sync: None,
             retention: RetentionPolicy::default(),
+            query_cache: HashMap::new(),
         }
     }
 
+    #[instrument]
     pub fn handle(self) -> DatastoreHandle {
         Arc::new(Mutex::new(self))
     }
 
+    #[instrument]
     pub fn set_retention(&mut self, retention: RetentionPolicy) {
         self.retention = retention;
     }
 
+    #[instrument]
+    pub fn clear_query_cache(&mut self) {
+        self.query_cache.clear();
+    }
+
+    #[instrument(skip_all)]
     pub fn create_bucket<T: TopicKeyProvider>(&mut self, topic: &T) {
         if !self.buckets.contains_key(&topic.handle()) {
-            trace!("Creating new bucket for topic {:?}", topic.key());
             let bucket = Bucket::new(topic);
             bucket
                 .write()
                 .unwrap()
                 .set_retention(self.retention.clone());
             self.buckets.insert(topic.handle().clone(), bucket);
+            self.clear_query_cache();
         }
     }
 
+    #[instrument(skip_all)]
     pub fn get_or_create_bucket<T: TopicKeyProvider>(&mut self, topic: &T) -> BucketHandle {
         self.create_bucket(topic);
         self.get_bucket(topic).unwrap()
     }
 
+    #[instrument(skip_all)]
     pub fn get_bucket<T: TopicKeyProvider>(
         &self,
         topic: &T,
@@ -95,6 +110,23 @@ impl Datastore {
             .ok_or_else(|| DatastoreError::BucketNotFound(topic.key().clone()))
     }
 
+    #[instrument(skip_all)]
+    pub fn get_buckets_matching_cached<T: TopicKeyProvider>(
+        &mut self,
+        parent_topic: &T,
+    ) -> Result<Vec<BucketHandle>, DatastoreError> {
+        // Check cache first
+        if let Some(cached_buckets) = self.query_cache.get(&parent_topic.handle()) {
+            return Ok(cached_buckets.clone());
+        }
+
+        // If not in cache, get buckets and cache result
+        let buckets = self.get_buckets_matching(parent_topic)?;
+        self.query_cache.insert(parent_topic.handle(), buckets.clone());
+        Ok(buckets)
+    }
+    
+    #[instrument(skip_all)]
     pub fn get_buckets_matching<T: TopicKeyProvider>(
         &self,
         parent_topic: &T,
@@ -116,6 +148,7 @@ impl Datastore {
             .collect::<Vec<BucketHandle>>())
     }
 
+    #[instrument(skip_all)]
     pub fn get_struct<T, S>(&self, topic: &T) -> Result<S, DatastoreError>
     where
         T: TopicKeyProvider,
@@ -162,6 +195,7 @@ impl Datastore {
         }
     }
 
+    #[instrument(skip_all)]
     pub fn add_struct<T: TopicKeyProvider, S: Serialize>(
         &mut self,
         topic: &T,
@@ -183,6 +217,7 @@ impl Datastore {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     pub fn add_primitive<T: TopicKeyProvider>(
         &mut self,
         topic: &T,
@@ -199,6 +234,7 @@ impl Datastore {
 
     /// Add datapoints without notifying listeners, usually used when receiving remote datapoints
     /// that we want to store without triggering any local listeners
+    #[instrument(skip_all)]
     pub fn add_datapoints_silent(&mut self, datapoints: Vec<Datapoint>) {
         let mut updated_datapoints = Vec::new();
         for datapoint in datapoints {
@@ -216,6 +252,7 @@ impl Datastore {
         }
     }
 
+    #[instrument(skip_all)]
     pub fn add_datapoints(&mut self, datapoints: Vec<Datapoint>) {
         let mut updated_datapoints = Vec::new();
         for datapoint in datapoints.clone() {
@@ -234,6 +271,7 @@ impl Datastore {
         }
     }
 
+    #[instrument(skip_all)]
     pub fn get_latest_primitive<T: TopicKeyProvider>(&self, topic: &T) -> Option<Primitives> {
         let topic = topic.handle();
         self.buckets
@@ -241,6 +279,7 @@ impl Datastore {
             .and_then(|b| b.read().unwrap().get_latest_value().cloned())
     }
 
+    #[instrument(skip_all)]
     pub fn get_latest_datapoints<T: TopicKeyProvider>(
         &self,
         topic_query: &T,
@@ -253,6 +292,7 @@ impl Datastore {
         Ok(datapoints)
     }
 
+    #[instrument(skip_all)]
     pub fn get_latest_primitives<T: TopicKeyProvider>(
         &self,
         topics: HashSet<T>,
@@ -263,6 +303,7 @@ impl Datastore {
             .collect()
     }
 
+    #[instrument(skip_all)]
     pub fn get_datapoints<T: TopicKeyProvider>(
         &self,
         topic: &T,
@@ -277,16 +318,21 @@ impl Datastore {
 
         Ok(datapoints)
     }
+
+    #[instrument(skip_all)]
     pub fn get_all_keys(&self) -> Vec<TopicKeyHandle> {
         self.buckets.keys().cloned().collect()
     }
 
+    #[instrument(skip_all)]
     pub fn get_all_display_names(&self) -> HashMap<TopicKeyHandle, String> {
         self.buckets
             .keys()
             .map(|k| (k.clone(), k.key().display_name()))
             .collect()
     }
+
+    #[instrument(skip_all)]
     pub fn get_updated_keys<T: TopicKeyProvider>(
         &self,
         topic: &T,
@@ -299,6 +345,7 @@ impl Datastore {
         Ok(new_values.iter().map(|v| v.topic.handle()).collect())
     }
 
+    #[instrument(skip_all)]
     pub fn apply_view(&mut self, view: DataView) -> Result<(), DatastoreError> {
         let mut datapoints = Vec::new();
         for (key, value) in view.maps {
@@ -313,6 +360,7 @@ impl Datastore {
 // Listener Implementations
 // ----------------------------
 impl Datastore {
+    #[instrument(skip(self, listener))]
     pub fn add_listener(
         &mut self,
         topic_query: &TopicKey,
@@ -329,6 +377,7 @@ impl Datastore {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     pub fn notify_datapoints(&mut self, datapoints: Vec<Datapoint>) {
         for (filter, listeners) in self.listeners.iter_mut() {
             for datapoint in datapoints.iter() {
@@ -342,6 +391,7 @@ impl Datastore {
         }
     }
 
+    #[instrument(skip_all)]
     pub fn notify_raw_datapoints(&mut self, datapoints: Vec<Datapoint>) {
         for (filter, listeners) in self.listeners.iter_mut() {
             for datapoint in datapoints.iter() {
@@ -354,6 +404,7 @@ impl Datastore {
         }
     }
 
+    #[instrument(skip_all)]
     pub fn notify_bucket_updates(&mut self, _buckets: Vec<BucketHandle>) {}
 }
 
@@ -361,6 +412,7 @@ impl Datastore {
 /// Sync Implementations
 /// ----------------------------
 impl Datastore {
+    #[instrument(skip_all)]
     pub fn setup_sync(&mut self, config: SyncConfig, adapter: SyncAdapterHandle) {
         let ds_sync = DatastoreSync::new(config.clone(), adapter).as_handle();
         self.sync = Some(ds_sync.clone());
@@ -368,6 +420,7 @@ impl Datastore {
         self.add_listener(&TopicKey::empty(), ds_sync.clone());
     }
 
+    #[instrument(skip_all)]
     pub fn run_sync(&mut self) {
         let sync = self.sync.clone();
         if let Some(sync) = sync {

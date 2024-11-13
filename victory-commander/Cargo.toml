@@ -14,3 +14,4 @@ serde = { version = "1.0.210", features = ["derive"] }
 victory-data-store = { path = "../victory-data-store" }
 victory-wtf = { path = "../victory-wtf" }
 victory-broker = { path = "../victory-broker" }
+tracing = "0.1.40"

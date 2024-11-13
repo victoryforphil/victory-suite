@@ -1732,6 +1732,7 @@ dependencies = [
  "serde",
  "strum",
  "strum_macros",
+ "tracing",
  "victory-broker",
  "victory-data-store",
  "victory-wtf",

@@ -42,6 +42,7 @@ impl TcpSyncServer {
         server
     }
 
+    #[tracing::instrument(skip_all)]
     async fn start_tcp_server_async(&mut self) {
         // Start a looping thread to accept new connections
         let address = self.address.clone();
@@ -75,7 +76,7 @@ impl SyncAdapter for TcpSyncServer {
             .map(|c| c.try_lock().unwrap().connection_id)
             .collect()
     }
-
+    #[tracing::instrument(skip_all)]
     fn read(
         &mut self,
     ) -> Result<Vec<crate::sync::packet::SyncMessage>, crate::sync::adapters::AdapterError> {
@@ -95,6 +96,7 @@ impl SyncAdapter for TcpSyncServer {
         Ok(messages)
     }
 
+    #[tracing::instrument(skip_all)]
     fn write(
         &mut self,
         to_send: Vec<crate::sync::packet::SyncMessage>,

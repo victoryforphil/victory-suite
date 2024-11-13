@@ -39,6 +39,9 @@ impl TcpSyncConnection {
             let mut temp_buffer = [0u8; 1024];
 
             loop {
+                let span = tracing::debug_span!("tcp_read");
+                let _enter = span.enter();
+
                 match read_half.read(&mut temp_buffer).await {
                     Ok(0) => {
                         // Connection closed
@@ -46,11 +49,17 @@ impl TcpSyncConnection {
                         break;
                     }
                     Ok(n) => {
+                        let span = tracing::debug_span!("tcp_process", bytes = n);
+                        let _enter = span.enter();
+
                         // Append new data to buffer
                         buffer.extend_from_slice(&temp_buffer[..n]);
 
                         // Try to deserialize complete messages
                         while !buffer.is_empty() {
+                            let span = tracing::debug_span!("tcp_deserialize", buffer_size = buffer.len());
+                            let _enter = span.enter();
+
                             match rmp_serde::from_slice::<SyncMessage>(&buffer) {
                                 Ok(message) => {
                                     // Get size of deserialized message
@@ -92,7 +101,8 @@ impl TcpSyncConnection {
         tokio::spawn(async move {
             while let Some(message) = send_rx.recv().await {
                 let data = rmp_serde::to_vec_named(&message).unwrap();
-
+                let span = tracing::debug_span!("tcp_write", bytes = data.len());
+                let _enter = span.enter();
                 if let Err(e) = write_half.write(&data).await {
                     warn!("[Sync/TcpConnection] Failed to write to stream: {}", e);
                     break;
