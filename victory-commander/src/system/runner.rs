@@ -107,10 +107,10 @@ impl BasherSysRunner {
 
         while self.current_time < end_time {
             let start_time = Timepoint::now();
-            
+
             let systems_span = tracing::debug_span!("systems_execution");
             let _systems_guard = systems_span.enter();
-            
+
             for system in self.systems.iter_mut() {
                 let mut system = system.lock().unwrap();
                 let name = system.name();
@@ -128,7 +128,7 @@ impl BasherSysRunner {
 
                 let new_data = system.execute(&inputs, self.dt.clone());
                 self.data_store
-                .lock()
+                    .lock()
                     .unwrap()
                     .apply_view(new_data)
                     .unwrap();
@@ -152,21 +152,28 @@ impl BasherSysRunner {
                 let sleep_duration = Duration::from_secs_f64(sleep_time);
 
                 if self.real_time {
-                    let sleep_span = tracing::debug_span!("real_time_sleep", duration_ms = sleep_duration.as_millis());
+                    let sleep_span = tracing::debug_span!(
+                        "real_time_sleep",
+                        duration_ms = sleep_duration.as_millis()
+                    );
                     let _sleep_guard = sleep_span.enter();
                     std::thread::sleep(sleep_duration);
                 }
             }
 
             self.current_time = self.current_time.clone() + self.dt.clone();
-            
+
             let sync_span = tracing::debug_span!("datastore_sync");
             let _sync_guard = sync_span.enter();
             self.data_store.lock().unwrap().run_sync();
         }
 
         let time_remaining_ms = ((end_time - self.current_time.clone()).secs() * 1000.0) as i64;
-        tracing::event!(tracing::Level::INFO, time_remaining_ms, "main_loop_complete");
+        tracing::event!(
+            tracing::Level::INFO,
+            time_remaining_ms,
+            "main_loop_complete"
+        );
         info!("Finished running main loop");
     }
 }

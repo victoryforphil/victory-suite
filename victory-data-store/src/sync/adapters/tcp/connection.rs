@@ -57,7 +57,8 @@ impl TcpSyncConnection {
 
                         // Try to deserialize complete messages
                         while !buffer.is_empty() {
-                            let span = tracing::debug_span!("tcp_deserialize", buffer_size = buffer.len());
+                            let span =
+                                tracing::debug_span!("tcp_deserialize", buffer_size = buffer.len());
                             let _enter = span.enter();
 
                             match rmp_serde::from_slice::<SyncMessage>(&buffer) {

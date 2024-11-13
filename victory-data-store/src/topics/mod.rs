@@ -95,7 +95,7 @@ impl PartialEq for TopicKey {
         if self.sections.len() != other.sections.len() {
             return false;
         }
-        
+
         for (a, b) in self.sections.iter().zip(other.sections.iter()) {
             if a.id != b.id {
                 return false;
@@ -149,10 +149,13 @@ impl TopicKey {
     #[instrument(skip_all)]
     pub fn display_name(&self) -> String {
         let mut result = String::with_capacity(
-            self.sections.iter().map(|s| s.display_name.len()).sum::<usize>() 
-            + self.sections.len().saturating_sub(1) // For separators
+            self.sections
+                .iter()
+                .map(|s| s.display_name.len())
+                .sum::<usize>()
+                + self.sections.len().saturating_sub(1), // For separators
         );
-        
+
         let mut first = true;
         for section in &self.sections {
             if first {

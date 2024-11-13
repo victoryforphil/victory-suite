@@ -122,10 +122,11 @@ impl Datastore {
 
         // If not in cache, get buckets and cache result
         let buckets = self.get_buckets_matching(parent_topic)?;
-        self.query_cache.insert(parent_topic.handle(), buckets.clone());
+        self.query_cache
+            .insert(parent_topic.handle(), buckets.clone());
         Ok(buckets)
     }
-    
+
     #[instrument(skip_all)]
     pub fn get_buckets_matching<T: TopicKeyProvider>(
         &self,
