@@ -1,26 +1,29 @@
+
+pub type AdapterID = u32;
+pub type ConnectionID = u32;
+
+use std::sync::{Arc, Mutex};
+
+use victory_data_store::database::view::DataView;
+
+use crate::task::config::BrokerTaskConfig;
+
 pub mod mock;
-pub mod tcp;
 
-use std::collections::HashMap;
+pub type BrokerAdapterHandle = Arc<Mutex<dyn BrokerAdapter>>;
 
-use crate::{channel::PubSubChannelIDType, messages::PubSubMessage, MutexType};
+#[derive(thiserror::Error, Debug)]
+pub enum BrokerAdapterError {
+    #[error(transparent)]
+    Generic(#[from] Box<dyn std::error::Error + Send + Sync>),
 
-pub trait PubSubAdapter {
-    fn get_name(&self) -> String;
-
-    fn get_description(&self) -> String {
-        format!("Adapter: {}", self.get_name())
-    }
-
-    fn get_stats(&self) -> HashMap<String, String> {
-        HashMap::new()
-    }
-
-    fn get_live(&self) -> bool {
-        true
-    }
-
-    fn read(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>>;
-    fn write(&mut self, to_send: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>);
+    /// Waiting for task response
+    #[error("Waiting for task response")]
+    WaitingForTaskResponse,
 }
-pub type PubSubAdapterHandle = MutexType<dyn PubSubAdapter + Send>;
+
+pub trait BrokerAdapter{
+    fn get_new_tasks(&mut self) -> Result<Vec<BrokerTaskConfig>, BrokerAdapterError>;
+    fn execute_task(&mut self, task: &BrokerTaskConfig, inputs: &DataView) -> Result<(), BrokerAdapterError>;
+    fn check_task_response(&mut self, task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError>;
+}

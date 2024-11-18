@@ -20,11 +20,5 @@ victory-data-store = { path = "../victory-data-store" }
 victory-wtf = { path = "../victory-wtf" }
 test-log = "0.2.16"
 serde_json = "1.0.132"
-
-[[bin]]
-name = "tcp_server"
-path = "bin/tcp_server.rs"
-
-[[bin]]
-name = "tcp_client"
-path = "bin/tcp_client.rs"
+test-env-log = "0.2.8"
+env_logger = "0.11.5"
