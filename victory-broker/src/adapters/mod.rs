@@ -24,6 +24,9 @@ pub enum BrokerAdapterError {
 
 pub trait BrokerAdapter{
     fn get_new_tasks(&mut self) -> Result<Vec<BrokerTaskConfig>, BrokerAdapterError>;
-    fn execute_task(&mut self, task: &BrokerTaskConfig, inputs: &DataView) -> Result<(), BrokerAdapterError>;
-    fn check_task_response(&mut self, task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError>;
+    fn send_execute(&mut self, task: &BrokerTaskConfig, inputs: &DataView) -> Result<(), BrokerAdapterError>;
+    fn recv_response(&mut self, task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError>;
+
+    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, DataView)>, BrokerAdapterError>;
+    fn send_response(&mut self, task: &BrokerTaskConfig, outputs: &DataView) -> Result<(), BrokerAdapterError>;
 }

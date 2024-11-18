@@ -24,12 +24,12 @@ impl BrokerAdapter for MockBrokerAdapter{
         Ok(self.new_tasks.drain(..).collect())
     }
 
-    fn execute_task(&mut self, task: &BrokerTaskConfig, inputs: &DataView) -> Result<(), BrokerAdapterError> {
+    fn send_execute(&mut self, task: &BrokerTaskConfig, inputs: &DataView) -> Result<(), BrokerAdapterError> {
         self.executed_tasks.push((task.clone(), inputs.clone()));
         Ok(())
     }
 
-    fn check_task_response(&mut self, task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError> {
+    fn recv_response(&mut self, task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError> {
         Ok(DataView::new())
     }
 }
@@ -46,7 +46,7 @@ mod broker_adapter_tests{
     #[test]
     fn test_mock_adapter_get_new_tasks(){
         let mut adapter = MockBrokerAdapter::new();
-        let tasks = vec![BrokerTaskConfig::new(0)];
+        let tasks = vec![BrokerTaskConfig::new(0, "test_task")];
         adapter.new_tasks = tasks.clone();
         let new_tasks = adapter.get_new_tasks().unwrap();
         assert_eq!(new_tasks.len(), 1);
@@ -59,9 +59,9 @@ mod broker_adapter_tests{
     #[test]
     fn test_mock_adapter_execute_task(){
         let mut adapter = MockBrokerAdapter::new();
-        let task = BrokerTaskConfig::new(0);
+        let task = BrokerTaskConfig::new(0, "test_task");
         let inputs = DataView::new();
-        adapter.execute_task(&task, &inputs).unwrap();
+        adapter.send_execute(&task, &inputs).unwrap();
         assert_eq!(adapter.executed_tasks.len(), 1);
         assert_eq!(adapter.executed_tasks[0].0.task_id, task.task_id);
     }
@@ -72,8 +72,8 @@ mod broker_adapter_tests{
     #[test]
     fn test_mock_adapter_check_task_response(){
         let mut adapter = MockBrokerAdapter::new();
-        let task = BrokerTaskConfig::new(0);
-        let response = adapter.check_task_response(&task);
+        let task = BrokerTaskConfig::new(0, "test_task");
+        let response = adapter.recv_response(&task);
         assert!(response.is_ok());
     }
 }

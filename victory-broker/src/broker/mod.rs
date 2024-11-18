@@ -87,16 +87,16 @@ where
             task_state.set_last_execution_time(self.broker_time.clone());
             task_state.set_status(BrokerTaskStatus::Executing);
             // Execute the task
-            adapter.execute_task(&task_config, &inputs).unwrap();
+            adapter.send_execute(&task_config, &inputs).unwrap();
 
             // 4. Check the task response
             debug!("Broker // Waiting for response for {:?}", task_id);
-            let mut task_response = adapter.check_task_response(&task_config);
+            let mut task_response = adapter.recv_response(&task_config);
             // Set the status to WaitingForTaskResponse
             task_state.set_status(BrokerTaskStatus::Waiting);
 
             while let Err(BrokerAdapterError::WaitingForTaskResponse) = task_response {
-                task_response = adapter.check_task_response(&task_config);
+                task_response = adapter.recv_response(&task_config);
                 std::thread::sleep(std::time::Duration::from_millis(1));
             }
             // Set the status to Completed
