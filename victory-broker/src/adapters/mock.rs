@@ -46,7 +46,7 @@ mod broker_adapter_tests{
     #[test]
     fn test_mock_adapter_get_new_tasks(){
         let mut adapter = MockBrokerAdapter::new();
-        let tasks = vec![BrokerTaskConfig::new(0, "test_task")];
+        let tasks = vec![BrokerTaskConfig::new_with_id(0, "test_task")];
         adapter.new_tasks = tasks.clone();
         let new_tasks = adapter.get_new_tasks().unwrap();
         assert_eq!(new_tasks.len(), 1);
@@ -59,7 +59,7 @@ mod broker_adapter_tests{
     #[test]
     fn test_mock_adapter_execute_task(){
         let mut adapter = MockBrokerAdapter::new();
-        let task = BrokerTaskConfig::new(0, "test_task");
+        let task = BrokerTaskConfig::new_with_id(0, "test_task");
         let inputs = DataView::new();
         adapter.send_execute(&task, &inputs).unwrap();
         assert_eq!(adapter.executed_tasks.len(), 1);
@@ -72,7 +72,7 @@ mod broker_adapter_tests{
     #[test]
     fn test_mock_adapter_check_task_response(){
         let mut adapter = MockBrokerAdapter::new();
-        let task = BrokerTaskConfig::new(0, "test_task");
+        let task = BrokerTaskConfig::new_with_id(0, "test_task");
         let response = adapter.recv_response(&task);
         assert!(response.is_ok());
     }

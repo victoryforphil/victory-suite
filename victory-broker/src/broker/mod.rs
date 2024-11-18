@@ -204,9 +204,9 @@ mod broker_tests {
         let mut broker = Broker::new(MockBrokerCommander::new());
         let mut adapter = MockBrokerAdapter::new();
         
-        let mut task_a = BrokerTaskConfig::new(0);
+        let mut task_a = BrokerTaskConfig::new_with_id(0);
         task_a.subscriptions.push(BrokerTaskSubscription::new_latest(&TopicKey::from_str("test/a")));
-        let mut task_b = BrokerTaskConfig::new(1);
+        let mut task_b = BrokerTaskConfig::new_with_id(1);
         task_b.subscriptions.push(BrokerTaskSubscription::new_latest(&TopicKey::from_str("test/b")));
 
         adapter.new_tasks.push(task_a);
@@ -236,7 +236,7 @@ mod broker_tests {
         let tasks = broker.get_tasks_with_status(BrokerTaskStatus::Queued);
         assert_eq!(tasks.len(), 0);
 
-        let task = BrokerTaskConfig::new(0);
+        let task = BrokerTaskConfig::new_with_id(0);
         let mut task_state = BrokerTaskState::new(0);
         task_state.set_status(BrokerTaskStatus::Queued);
 
@@ -250,7 +250,7 @@ mod broker_tests {
     #[test]
     fn test_check_trigger_always(){
         let mut broker = Broker::new(MockBrokerCommander::new());
-        let mut task = BrokerTaskConfig::new(0);
+        let mut task = BrokerTaskConfig::new_with_id(0);
         task.trigger = BrokerTaskTrigger::Always;
         let trigger = broker.check_trigger(&task);
         assert!(trigger.is_ok());
@@ -260,7 +260,7 @@ mod broker_tests {
     #[test]
     fn test_check_trigger_rate(){
         let mut broker = Broker::new(MockBrokerCommander::new());
-        let mut task = BrokerTaskConfig::new(0);
+        let mut task = BrokerTaskConfig::new_with_id(0);
 
         broker.task_configs.insert(0, task.clone());
         let mut task_state = BrokerTaskState::new(0);
@@ -304,7 +304,7 @@ mod broker_tests {
         let mut broker = Broker::new(MockBrokerCommander::new());
         let mut adapter = MockBrokerAdapter::new();
         // Add a new task to the adapter
-        adapter.new_tasks.push(BrokerTaskConfig::new(0));
+        adapter.new_tasks.push(BrokerTaskConfig::new_with_id(0));
         broker.adapters.insert(0, Arc::new(Mutex::new(adapter)));
         broker.read_new_tasks().unwrap();
         // Check that the task was added to the task_configs map
