@@ -49,7 +49,7 @@ mod mock_commander_tests{
     #[test]
     fn test_add_task(){
         let mut commander = MockBrokerCommander::new();
-        let task = BrokerTaskConfig::new_with_id(0);
+        let task = BrokerTaskConfig::new_with_id(0, "test");
         commander.add_task(task).unwrap();
     }
 
@@ -60,7 +60,7 @@ mod mock_commander_tests{
     #[test]
     fn test_get_next_tasks(){
         let mut commander = MockBrokerCommander::new();
-        let task = BrokerTaskConfig::new_with_id(0);
+        let task = BrokerTaskConfig::new_with_id(0, "test");
         commander.add_task(task).unwrap();
         let next_tasks = commander.get_next_tasks().unwrap();
         assert_eq!(next_tasks.len(), 1);

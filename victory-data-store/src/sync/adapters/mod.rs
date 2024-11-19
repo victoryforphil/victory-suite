@@ -75,7 +75,7 @@ mod tests_sync_adapter {
     #[test]
     fn test_mock_register_client() {
         let mut adapter = MockSyncAdapter::new();
-        let msg = SyncMessage::new_register(vec!["test_topic".to_string()]);
+        let msg = SyncMessage::new_register(0,vec!["test_topic".to_string()]);
         adapter.register_client(msg).unwrap();
         assert_eq!(adapter.get_new_clients().unwrap(), vec![msg]);
     }
