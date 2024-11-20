@@ -1,15 +1,13 @@
 use std::collections::HashMap;
 
-use log::{debug, warn};
+use log::{debug, info, warn};
 use victory_data_store::database::{self, view::DataView, Datastore, DatastoreHandle};
 use victory_wtf::Timepoint;
 
 use crate::{
-    adapters::{AdapterID, BrokerAdapterError, BrokerAdapterHandle},
-    commander::BrokerCommander,
-    task::{
+    adapters::{AdapterID, BrokerAdapterError, BrokerAdapterHandle}, commander::BrokerCommander, node::info, task::{
         config::BrokerTaskConfig, state::{BrokerTaskState, BrokerTaskStatus}, subscription::SubscriptionMode, trigger::BrokerTaskTrigger, BrokerTaskID
-    },
+    }
 };
 
 pub struct Broker<TCommander> {
@@ -25,6 +23,12 @@ pub struct Broker<TCommander> {
 pub enum BrokerError {
     #[error(transparent)]
     Generic(#[from] Box<dyn std::error::Error + Send + Sync>),
+    /// Task timed out waiting for response
+    #[error("Task timed out waiting for response")]
+    TaskTimeout(BrokerTaskConfig),
+    
+    #[error("Task failed to execute")]
+    TaskExecutionFailed(BrokerTaskConfig),
 }
 
 impl<TCommander> Broker<TCommander>
@@ -52,7 +56,6 @@ where
     pub fn tick(&mut self) -> Result<(), BrokerError> {
 
         // 1. Read new tasks from adapters
-        debug!("Broker // Reading new tasks");
         let _ = match self.read_new_tasks() {
             Ok(tasks) => tasks,
             Err(e) => return Err(BrokerError::Generic(e.into())),
@@ -63,8 +66,12 @@ where
             Ok(tasks) => tasks,
             Err(e) => return Err(BrokerError::Generic(e.into())),
         };
-        debug!("Broker // Next tasks: {:?}", next_tasks.iter().map(|t| t.task_id).collect::<Vec<_>>()   );
 
+        if !next_tasks.is_empty() {
+            debug!("Broker // Next tasks: {:?}", next_tasks.iter().map(|t| t.task_id).collect::<Vec<_>>()   );
+        }else{
+            return Ok(());
+        }
         // 2.1 Set next_tasks to Queued state.
         for task in next_tasks {
             self.set_task_status(task.task_id, BrokerTaskStatus::Queued);
@@ -83,7 +90,7 @@ where
             // 3. Get inputs for the task
             let inputs = self.get_task_inputs(&task_config).unwrap();
 
-            debug!("Broker // Executing task: {:?}", task_id);
+            debug!("Broker // Executing task: {:?} using adapter: {:?}", task_id, task_config.adapter_id);
             // Execute the task
             let adapter_id = task_config.adapter_id;
             let adapter = self.adapters.get_mut(&adapter_id).unwrap();
@@ -93,15 +100,27 @@ where
             task_state.set_last_execution_time(self.broker_time.clone());
             task_state.set_status(BrokerTaskStatus::Executing);
             // Execute the task
-            adapter.send_execute(&task_config, &inputs).unwrap();
+            if let Err(e) = adapter.send_execute(&task_config, &inputs) {
+                warn!("Broker // Failed to execute task {:?}: {:?}", task_id, e);
+                self.task_states.remove(&task_id);
+                self.task_configs.remove(&task_id);
+                self.commander.remove_task(task_id).unwrap();
+                return Err(BrokerError::TaskExecutionFailed(task_config));
+            }
 
             // 4. Check the task response
             debug!("Broker // Waiting for response for {:?}", task_id);
             let mut task_response = adapter.recv_response(&task_config);
             // Set the status to WaitingForTaskResponse
             task_state.set_status(BrokerTaskStatus::Waiting);
-
+            let start_time = std::time::Instant::now();
+            
             while let Err(BrokerAdapterError::WaitingForTaskResponse) = task_response {
+             
+                if start_time.elapsed() > std::time::Duration::from_secs(1) {
+                    warn!("Broker // Task {:?} timed out waiting for response", task_id);
+                   return Err(BrokerError::TaskTimeout(task_config));
+                }
                 task_response = adapter.recv_response(&task_config);
                 std::thread::sleep(std::time::Duration::from_millis(1));
             }

@@ -19,7 +19,7 @@ use victory_wtf::Timepoint;
 
 use super::{listener::DataStoreListener, Datastore, DatastoreError};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataView {
     pub maps: HashMap<TopicKey, Primitives>,
     bucket_cache: HashMap<TopicKeyHandle, Vec<BucketHandle>>,

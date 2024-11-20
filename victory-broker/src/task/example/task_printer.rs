@@ -1,0 +1,44 @@
+use victory_data_store::{database::view::DataView, topics::TopicKey};
+
+use crate::task::{config::BrokerTaskConfig, subscription::BrokerTaskSubscription, trigger::BrokerTaskTrigger, BrokerTask};
+
+pub struct TaskPrinter {
+    pub subscribe_topic: TopicKey,
+}
+
+impl TaskPrinter {
+    pub fn new(subscribe_topic: TopicKey) -> Self {
+        Self { subscribe_topic }
+    }
+}
+
+impl BrokerTask for TaskPrinter {
+    fn get_config(&self) -> BrokerTaskConfig {
+        BrokerTaskConfig::new("TaskPrinter")
+            .with_trigger(BrokerTaskTrigger::Always)
+            .with_subscription(BrokerTaskSubscription::new_latest(&self.subscribe_topic))
+    }
+
+    fn on_execute(
+        &mut self,
+        inputs: &victory_data_store::database::view::DataView,
+    ) -> Result<DataView, anyhow::Error> {
+        if let Ok(values) = inputs.get_latest_map(&self.subscribe_topic) {
+            println!("TaskPrinter Results:");
+            println!("+------------------------+------------------------+");
+            println!("| Topic                 | Value                  |");
+            println!("+------------------------+------------------------+");
+            for (topic, value) in values {
+                println!(
+                    "| {:<22} | {:<20?} |",
+                    topic,
+                    value
+                );
+            }
+            println!("+------------------------+------------------------+");
+        } else {
+            println!("TaskPrinter: No data available for topic '{}'", self.subscribe_topic);
+        }
+        Ok(DataView::new())
+    }
+}

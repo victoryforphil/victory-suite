@@ -33,6 +33,11 @@ impl BrokerCommander for MockBrokerCommander{
        let drained_tasks = self.tasks.drain(..1).collect();
        Ok(drained_tasks)
     }
+    
+    fn remove_task(&mut self, task_id: crate::task::BrokerTaskID) -> Result<(), super::BrokerCommanderError> {
+        self.tasks.retain(|task| task.task_id != task_id);
+        Ok(())
+    }
 }
 
 // -

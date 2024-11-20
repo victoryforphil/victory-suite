@@ -1,4 +1,4 @@
-use crate::task::config::BrokerTaskConfig;
+use crate::task::{config::BrokerTaskConfig, BrokerTaskID};
 
 pub mod mock;
 pub mod linear;
@@ -15,4 +15,5 @@ pub enum BrokerCommanderError {
 pub trait BrokerCommander{
     fn add_task(&mut self, task: BrokerTaskConfig) -> Result<(), BrokerCommanderError>;
     fn get_next_tasks(&mut self) -> Result<Vec<BrokerTaskConfig>, BrokerCommanderError>;
+    fn remove_task(&mut self, task_id: BrokerTaskID) -> Result<(), BrokerCommanderError>;
 }

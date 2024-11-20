@@ -4,6 +4,7 @@ use std::{
 };
 
 use log::{debug, info, trace, warn};
+use serde::{Deserialize, Serialize};
 use victory_wtf::Timepoint;
 
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 /// A bucket is a collection of datapoints for a specific topic
 pub struct Bucket {
     pub topic: TopicKeyHandle,

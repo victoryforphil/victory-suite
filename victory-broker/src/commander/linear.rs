@@ -1,4 +1,6 @@
-use crate::task::config::BrokerTaskConfig;
+use log::info;
+
+use crate::task::{config::BrokerTaskConfig, BrokerTaskID};
 
 use super::{BrokerCommander, BrokerCommanderError};
 
@@ -35,6 +37,13 @@ impl BrokerCommander for LinearBrokerCommander {
         self.current_task = (self.current_task + 1) % self.tasks.len();
 
         Ok(vec![task])
+    }
+
+    fn remove_task(&mut self, task_id: BrokerTaskID) -> Result<(), BrokerCommanderError> {
+        self.tasks.retain(|task| task.task_id != task_id);
+        info!("LinearCommander // Removed task: {:?}", task_id);
+        self.current_task = 0;
+        Ok(())
     }
 }
 

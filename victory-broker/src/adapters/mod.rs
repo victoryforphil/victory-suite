@@ -9,6 +9,7 @@ use victory_data_store::database::view::DataView;
 use crate::task::config::BrokerTaskConfig;
 
 pub mod mock;
+pub mod tcp;
 pub mod channel;
 pub type BrokerAdapterHandle = Arc<Mutex<dyn BrokerAdapter>>;
 
