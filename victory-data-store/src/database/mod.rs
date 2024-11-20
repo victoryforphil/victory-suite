@@ -623,9 +623,9 @@ mod tests {
             .unwrap();
 
         let view = DataView::new()
-            .add_query(&datastore, &topic_a)
+            .add_query(&mut datastore, &topic_a)
             .unwrap()
-            .add_query(&datastore, &topic_b)
+            .add_query(&mut datastore, &topic_b)
             .unwrap();
 
         let result: TestStructA = view.get_latest(&topic_a).unwrap();

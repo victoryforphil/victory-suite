@@ -1,6 +1,7 @@
 use crate::task::config::BrokerTaskConfig;
 
 pub mod mock;
+pub mod linear;
 
 #[derive(thiserror::Error, Debug)]
 pub enum BrokerCommanderError {

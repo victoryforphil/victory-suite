@@ -9,7 +9,7 @@ use victory_data_store::database::view::DataView;
 use crate::task::config::BrokerTaskConfig;
 
 pub mod mock;
-
+pub mod channel;
 pub type BrokerAdapterHandle = Arc<Mutex<dyn BrokerAdapter>>;
 
 #[derive(thiserror::Error, Debug)]
@@ -22,7 +22,7 @@ pub enum BrokerAdapterError {
     WaitingForTaskResponse,
 }
 
-pub trait BrokerAdapter{
+pub trait BrokerAdapter: Send {
     fn get_new_tasks(&mut self) -> Result<Vec<BrokerTaskConfig>, BrokerAdapterError>;
     fn send_new_task(&mut self, task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError>;
     fn send_execute(&mut self, task: &BrokerTaskConfig, inputs: &DataView) -> Result<(), BrokerAdapterError>;

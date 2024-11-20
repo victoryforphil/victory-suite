@@ -43,6 +43,12 @@ where
         }
     }
 
+    pub fn add_adapter(&mut self, adapter: BrokerAdapterHandle){
+        let id = rand::random::<u32>();
+        debug!("Broker // Adding adapter with id: {:?}", id);
+        self.adapters.insert(id, adapter);
+    }
+
     pub fn tick(&mut self) -> Result<(), BrokerError> {
 
         // 1. Read new tasks from adapters
@@ -129,12 +135,13 @@ where
 {
     /// Read for any new registered tasks from adapters
     fn read_new_tasks(&mut self) -> Result<(), anyhow::Error> {
-        for (_adapter_id, adapter_handle) in self.adapters.iter_mut() {
+        for (adapter_id, adapter_handle) in self.adapters.iter_mut() {
             let mut adapter = adapter_handle.lock().unwrap();
-            let new_tasks = adapter.get_new_tasks()?;
+            let mut new_tasks = adapter.get_new_tasks()?;
         
-            for task in new_tasks {
-                debug!("Broker // New Task read from adapter {:?}", task.task_id);
+            for task in &mut new_tasks {
+                debug!("Broker // New Task {:?} read from adapter {:?}", task.task_id, adapter_id);
+                task.adapter_id = adapter_id.clone();   
                 // Create a new task state and insert it into the task_states map
                 self.task_states.insert(task.task_id, BrokerTaskState::new(task.task_id));
                 // Insert the task config into the task_configs map
@@ -204,9 +211,9 @@ mod broker_tests {
         let mut broker = Broker::new(MockBrokerCommander::new());
         let mut adapter = MockBrokerAdapter::new();
         
-        let mut task_a = BrokerTaskConfig::new_with_id(0);
+        let mut task_a = BrokerTaskConfig::new_with_id(0, "test_task_a");
         task_a.subscriptions.push(BrokerTaskSubscription::new_latest(&TopicKey::from_str("test/a")));
-        let mut task_b = BrokerTaskConfig::new_with_id(1);
+        let mut task_b = BrokerTaskConfig::new_with_id(1, "test_task_b");
         task_b.subscriptions.push(BrokerTaskSubscription::new_latest(&TopicKey::from_str("test/b")));
 
         adapter.new_tasks.push(task_a);
@@ -236,7 +243,7 @@ mod broker_tests {
         let tasks = broker.get_tasks_with_status(BrokerTaskStatus::Queued);
         assert_eq!(tasks.len(), 0);
 
-        let task = BrokerTaskConfig::new_with_id(0);
+        let task = BrokerTaskConfig::new_with_id(0, "test_task");
         let mut task_state = BrokerTaskState::new(0);
         task_state.set_status(BrokerTaskStatus::Queued);
 
@@ -250,7 +257,7 @@ mod broker_tests {
     #[test]
     fn test_check_trigger_always(){
         let mut broker = Broker::new(MockBrokerCommander::new());
-        let mut task = BrokerTaskConfig::new_with_id(0);
+        let mut task = BrokerTaskConfig::new_with_id(0, "test_task");
         task.trigger = BrokerTaskTrigger::Always;
         let trigger = broker.check_trigger(&task);
         assert!(trigger.is_ok());
@@ -260,7 +267,7 @@ mod broker_tests {
     #[test]
     fn test_check_trigger_rate(){
         let mut broker = Broker::new(MockBrokerCommander::new());
-        let mut task = BrokerTaskConfig::new_with_id(0);
+        let mut task = BrokerTaskConfig::new_with_id(0, "test_task");
 
         broker.task_configs.insert(0, task.clone());
         let mut task_state = BrokerTaskState::new(0);
@@ -304,7 +311,7 @@ mod broker_tests {
         let mut broker = Broker::new(MockBrokerCommander::new());
         let mut adapter = MockBrokerAdapter::new();
         // Add a new task to the adapter
-        adapter.new_tasks.push(BrokerTaskConfig::new_with_id(0));
+        adapter.new_tasks.push(BrokerTaskConfig::new_with_id(0, "test_task"));
         broker.adapters.insert(0, Arc::new(Mutex::new(adapter)));
         broker.read_new_tasks().unwrap();
         // Check that the task was added to the task_configs map

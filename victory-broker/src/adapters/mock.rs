@@ -32,6 +32,18 @@ impl BrokerAdapter for MockBrokerAdapter{
     fn recv_response(&mut self, task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError> {
         Ok(DataView::new())
     }
+    
+    fn send_new_task(&mut self, task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError> {
+        todo!()
+    }
+    
+    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, DataView)>, BrokerAdapterError> {
+        todo!()
+    }
+    
+    fn send_response(&mut self, task: &BrokerTaskConfig, outputs: &DataView) -> Result<(), BrokerAdapterError> {
+        todo!()
+    }
 }
 
 
