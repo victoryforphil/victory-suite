@@ -108,7 +108,7 @@ impl BrokerAdapter for TcpBrokerServer {
         // Send to all remaining connections
         for connection in connections.iter() {
             let conn = connection.clone();
-            let mut conn = conn.try_lock().unwrap();
+            let conn = conn.try_lock().unwrap();
             if let Err(e) = conn.send_tx.try_send(message.clone()) {
                 warn!("[Broker/TcpServer] Failed to send new task: {:?}", e);
                 continue;
@@ -140,7 +140,7 @@ impl BrokerAdapter for TcpBrokerServer {
             ))))?;
 
         let conn = connection.clone();
-        let mut conn = conn.try_lock().unwrap();
+        let conn = conn.try_lock().unwrap();
         conn.send_tx
             .try_send(message)
             .map_err(|e| BrokerAdapterError::Generic(Box::new(e)))?;
@@ -185,7 +185,7 @@ impl BrokerAdapter for TcpBrokerServer {
             ))))?;
 
         let conn = connection.clone();
-        let mut conn = futures::executor::block_on(conn.lock());
+        let conn = futures::executor::block_on(conn.lock());
         conn.send_tx
             .try_send(message)
             .map_err(|e| BrokerAdapterError::Generic(Box::new(e)))?;

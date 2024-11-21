@@ -1,12 +1,11 @@
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
-use victory_data_store::topics::TopicKeyHandle;
 
 use crate::adapters::{AdapterID, ConnectionID};
 
 use super::{
-    state::BrokerTaskStatus, subscription::BrokerTaskSubscription, trigger::BrokerTaskTrigger,
+    subscription::BrokerTaskSubscription, trigger::BrokerTaskTrigger,
     BrokerTaskID,
 };
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]

@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 
 use log::{debug, info, warn};
-use victory_data_store::database::{self, view::DataView, Datastore, DatastoreHandle};
+use victory_data_store::database::{view::DataView, Datastore, DatastoreHandle};
 use victory_wtf::Timepoint;
 
 use crate::{
     adapters::{AdapterID, BrokerAdapterError, BrokerAdapterHandle},
     commander::BrokerCommander,
-    node::info,
     task::{
         config::{BrokerCommanderFlags, BrokerTaskConfig},
         state::{BrokerTaskState, BrokerTaskStatus},
@@ -105,7 +104,7 @@ where
             let task_id = task_id.clone();
             let task_config = task_config.clone();
             let adapter = self.adapters.get(&task_config.adapter_id).unwrap().clone();
-            let mut task_state = self.task_states.get_mut(&task_id).unwrap();
+            let task_state = self.task_states.get_mut(&task_id).unwrap();
             let broker_time = self.broker_time.clone();
             let datastore = self.datastore.clone();
 
@@ -380,7 +379,7 @@ mod broker_tests {
 
     #[test]
     fn test_check_trigger_always() {
-        let mut broker = Broker::new(MockBrokerCommander::new());
+        let broker = Broker::new(MockBrokerCommander::new());
         let mut task = BrokerTaskConfig::new_with_id(0, "test_task");
         task.trigger = BrokerTaskTrigger::Always;
         let trigger = broker.check_trigger(&task);

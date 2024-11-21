@@ -1,6 +1,6 @@
 use victory_data_store::database::view::DataView;
 
-use crate::task::{config::BrokerTaskConfig, state::BrokerTaskStatus};
+use crate::task::config::BrokerTaskConfig;
 
 use super::{BrokerAdapter, BrokerAdapterError};
 

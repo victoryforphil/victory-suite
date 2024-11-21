@@ -8,8 +8,6 @@ use log::info;
 
 use victory_broker::{
     adapters::tcp::tcp_client::TcpBrokerClient,
-    broker::Broker,
-    commander::linear::LinearBrokerCommander,
     node::{info::BrokerNodeInfo, BrokerNode},
     task::example::{task_printer::TaskPrinter, task_ticker::TaskTicker},
 };

@@ -1,6 +1,5 @@
-use log::{info, warn};
-use std::sync::Arc;
-use tokio::{net::TcpStream, sync::Mutex};
+use log::info;
+use tokio::net::TcpStream;
 
 use super::{
     connection::{TcpBrokerConnection, TcpBrokerConnectionHandle},
@@ -39,7 +38,7 @@ impl TcpBrokerClient {
     fn process_incoming_messages(&mut self) {
         let conn = self.connection.clone();
         let mut conn = conn.try_lock().unwrap();
-        let mut connection_id = conn.connection_id;
+        let connection_id = conn.connection_id;
         while let Ok(message) = conn.recv_rx.try_recv() {
             match message {
                 TcpBrokerMessage::NewTask(mut task_config) => {
@@ -68,7 +67,7 @@ impl BrokerAdapter for TcpBrokerClient {
     fn send_new_task(&mut self, task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError> {
         let message = TcpBrokerMessage::NewTask(task.clone());
         let conn = self.connection.clone();
-        let mut conn = conn.try_lock().unwrap();
+        let conn = conn.try_lock().unwrap();
         conn.send_tx
             .try_send(message)
             .map_err(|e| BrokerAdapterError::Generic(Box::new(e)))?;
@@ -82,7 +81,7 @@ impl BrokerAdapter for TcpBrokerClient {
     ) -> Result<(), BrokerAdapterError> {
         let message = TcpBrokerMessage::ExecuteTask(task.clone(), inputs.clone());
         let conn = self.connection.clone();
-        let mut conn = conn.try_lock().unwrap();
+        let conn = conn.try_lock().unwrap();
         conn.send_tx
             .try_send(message)
             .map_err(|e| BrokerAdapterError::Generic(Box::new(e)))?;
@@ -110,7 +109,7 @@ impl BrokerAdapter for TcpBrokerClient {
     ) -> Result<(), BrokerAdapterError> {
         let message = TcpBrokerMessage::TaskResponse(task.clone(), outputs.clone());
         let conn = self.connection.clone();
-        let mut conn = conn.try_lock().unwrap();
+        let conn = conn.try_lock().unwrap();
         conn.send_tx
             .try_send(message)
             .map_err(|e| BrokerAdapterError::Generic(Box::new(e)))?;

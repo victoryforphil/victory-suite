@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use info::BrokerNodeInfo;
 use log::{debug, info};
-use serde::{Deserialize, Serialize};
 use victory_data_store::database::view::DataView;
 
 use crate::{

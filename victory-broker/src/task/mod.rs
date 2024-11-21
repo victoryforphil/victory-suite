@@ -1,7 +1,6 @@
 use std::sync::{Arc, Mutex};
 
 use config::BrokerTaskConfig;
-use subscription::BrokerTaskSubscription;
 use victory_data_store::database::view::DataView;
 
 pub mod example;

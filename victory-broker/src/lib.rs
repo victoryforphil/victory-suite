@@ -13,9 +13,9 @@ mod tests {
     use crate::{
         adapters::channel::ChannelBrokerAdapter,
         broker::Broker,
-        commander::{linear::LinearBrokerCommander, mock::MockBrokerCommander},
+        commander::linear::LinearBrokerCommander,
         node::{info::BrokerNodeInfo, BrokerNode},
-        task::{config::BrokerTaskConfig, example::task_ticker::TaskTicker},
+        task::example::task_ticker::TaskTicker,
     };
     use test_env_log::test;
     #[test]

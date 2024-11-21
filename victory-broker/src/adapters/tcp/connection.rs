@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use log::{debug, info, warn};
+use log::{info, warn};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -21,7 +21,7 @@ pub struct TcpBrokerConnection {
 pub type TcpBrokerConnectionHandle = Arc<Mutex<TcpBrokerConnection>>;
 
 impl TcpBrokerConnection {
-    pub async fn new(mut stream: TcpStream) -> TcpBrokerConnectionHandle {
+    pub async fn new(stream: TcpStream) -> TcpBrokerConnectionHandle {
         let id = random();
         info!("[Broker/TcpConnection] New TcpBrokerConnection: {:?}", id);
         let (send_tx, mut send_rx) = mpsc::channel(512);
