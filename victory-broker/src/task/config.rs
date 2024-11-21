@@ -4,10 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::adapters::{AdapterID, ConnectionID};
 
-use super::{
-    subscription::BrokerTaskSubscription, trigger::BrokerTaskTrigger,
-    BrokerTaskID,
-};
+use super::{subscription::BrokerTaskSubscription, trigger::BrokerTaskTrigger, BrokerTaskID};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum BrokerCommanderFlags {
     NonBlocking,

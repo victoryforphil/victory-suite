@@ -10,6 +10,12 @@ pub struct MockBrokerCommander {
     tasks: Vec<BrokerTaskConfig>,
 }
 
+impl Default for MockBrokerCommander {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockBrokerCommander {
     pub fn new() -> Self {
         Self { tasks: vec![] }

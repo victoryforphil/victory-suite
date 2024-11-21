@@ -61,7 +61,7 @@ where
 
     pub fn tick(&mut self) -> Result<(), BrokerError> {
         // 1. Read new tasks from adapters
-        let _ = match self.read_new_tasks() {
+        match self.read_new_tasks() {
             Ok(tasks) => tasks,
             Err(e) => return Err(BrokerError::Generic(e.into())),
         };
@@ -93,7 +93,7 @@ where
         // Launch tasks in parallel
         for (task_id, task_config) in queued_tasks {
             // Skip if trigger check fails
-            if !self.check_trigger(&task_config).is_ok() {
+            if self.check_trigger(&task_config).is_err() {
                 continue;
             }
 
@@ -101,7 +101,7 @@ where
             let inputs = self.get_task_inputs(&task_config).unwrap();
 
             // Clone values needed in thread
-            let task_id = task_id.clone();
+            let task_id = task_id;
             let task_config = task_config.clone();
             let adapter = self.adapters.get(&task_config.adapter_id).unwrap().clone();
             let task_state = self.task_states.get_mut(&task_id).unwrap();
@@ -216,7 +216,7 @@ where
         self.task_states
             .iter()
             .filter(|(_, state)| state.status == status)
-            .map(|(task_id, _)| (task_id.clone(), self.task_configs[task_id].clone()))
+            .map(|(task_id, _)| (*task_id, self.task_configs[task_id].clone()))
             .collect()
     }
 
@@ -243,7 +243,7 @@ where
                     "Broker // New Task {:?} read from adapter {:?}",
                     task.task_id, adapter_id
                 );
-                task.adapter_id = adapter_id.clone();
+                task.adapter_id = *adapter_id;
                 // Create a new task state and insert it into the task_states map
                 self.task_states
                     .insert(task.task_id, BrokerTaskState::new(task.task_id));

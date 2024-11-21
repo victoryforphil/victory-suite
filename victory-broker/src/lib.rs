@@ -52,7 +52,7 @@ mod tests {
         let node_thread = std::thread::spawn(move || {
             let start = std::time::Instant::now();
             let node = node_handle.clone();
-            while start.elapsed().as_secs() < 2 {
+            while start.elapsed().as_secs() < 5 {
                 {
                     let mut node = node.lock().unwrap();
                     node.tick().unwrap();

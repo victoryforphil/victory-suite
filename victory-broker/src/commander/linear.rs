@@ -9,6 +9,12 @@ pub struct LinearBrokerCommander {
     current_task: usize,
 }
 
+impl Default for LinearBrokerCommander {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LinearBrokerCommander {
     pub fn new() -> Self {
         Self {

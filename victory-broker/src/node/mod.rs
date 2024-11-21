@@ -63,8 +63,8 @@ impl BrokerNode {
                 .task_handles
                 .get_mut(&task_config.task_id)
                 .expect("Task not found");
-            let results = task_handle.lock().unwrap().on_execute(&inputs)?;
-            adapter.send_response(&task_config, &results)?;
+            let results = task_handle.lock().unwrap().on_execute(inputs)?;
+            adapter.send_response(task_config, &results)?;
         }
 
         Ok(())
