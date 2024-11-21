@@ -50,6 +50,6 @@ async fn main() {
 
     loop {
         node.tick().unwrap();
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        tokio::time::sleep(Duration::from_millis(5)).await;
     }
 }

@@ -23,8 +23,14 @@ impl BrokerTask for TaskPrinter {
         &mut self,
         inputs: &victory_data_store::database::view::DataView,
     ) -> Result<DataView, anyhow::Error> {
+        
         if let Ok(values) = inputs.get_latest_map(&self.subscribe_topic) {
-            println!("TaskPrinter Results:");
+            // if values is empty, print empty message
+
+            if values.is_empty() {
+                return Ok(DataView::new());
+            }
+
             println!("+------------------------+------------------------+");
             println!("| Topic                 | Value                  |");
             println!("+------------------------+------------------------+");

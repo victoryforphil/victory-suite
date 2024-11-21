@@ -41,6 +41,33 @@ async fn main() {
     let server: TcpBrokerServer = TcpBrokerServer::new(&bind_addr).await.unwrap();
     let mut broker = Broker::new(LinearBrokerCommander::new());
     broker.add_adapter(Arc::new(Mutex::new(server)));
+    // Create channel adapter pair for local node
+    let (adapter_a, adapter_b) = victory_broker::adapters::channel::ChannelBrokerAdapter::new_pair();
+    broker.add_adapter(adapter_a);
+
+    // Create local node
+    let node_info = victory_broker::node::info::BrokerNodeInfo::new("local_node");
+    let mut node = victory_broker::node::BrokerNode::new(node_info, adapter_b);
+
+    // Create printer task to monitor all topics
+    let printer_task = victory_broker::task::example::task_printer::TaskPrinter::new(TopicKey::from_str(""));
+    node.add_task(Arc::new(Mutex::new(printer_task))).unwrap();
+
+    // Spawn node thread
+    let node_handle = Arc::new(Mutex::new(node));
+    let node_thread = tokio::spawn(async move {
+        loop {
+            {
+                let mut node = node_handle.lock().unwrap();
+                if let Err(e) = node.tick() {
+                    warn!("Node // Error: {:?}", e);
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(1)).await;
+            // Clear the console
+            print!("\x1B[2J\x1B[1;1H");
+        }
+    });
     loop {
         match broker.tick() {
             Ok(_) => (),
@@ -49,6 +76,6 @@ async fn main() {
             }
         }
         // Sleep for 100ms
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(5)).await;
     }
 }

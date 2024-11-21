@@ -1840,6 +1840,8 @@ dependencies = [
  "log",
  "pretty_env_logger 0.5.0",
  "rand",
+ "rmp",
+ "rmp-serde",
  "serde",
  "serde_json",
  "test-env-log",

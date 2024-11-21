@@ -71,17 +71,10 @@ impl TcpBrokerServer {
 
      
         for connection in connections.iter_mut() {
-            // Use timeout for connection lock as well
-            let mut conn_lock = match connection.try_lock() {
-                Ok(v) => v,
-                Err(e) => {
-                    warn!("[Broker/TcpServer] Timeout acquiring connection lock: {:?}", e);
-                    continue;
-                }
-            };
+            
 
-            let connection_id = conn_lock.connection_id;
-            while let Ok(message) = conn_lock.recv_rx.try_recv() {
+            let connection_id = connection.try_lock().unwrap().connection_id;
+            while let Ok(message) =  connection.try_lock().unwrap().recv_rx.try_recv() {
                
                 match message {
                     TcpBrokerMessage::NewTask(mut task_config) => {
@@ -116,13 +109,24 @@ impl BrokerAdapter for TcpBrokerServer {
     ) -> Result<(), BrokerAdapterError> {
         let message = TcpBrokerMessage::NewTask(task.clone());
         let connections = self.connections.clone();
-        let connections = futures::executor::block_on(connections.lock());
+
+        let connections = match connections.try_lock(){
+            Ok(v) => v,
+            Err(e) => {
+                warn!("[Broker/TcpServer] Timeout acquiring lock: {:?}", e);
+                return Err(BrokerAdapterError::Generic(Box::new(e)));
+            }
+        };
+
+
+        // Send to all remaining connections
         for connection in connections.iter() {
             let conn = connection.clone();
-            let mut conn = futures::executor::block_on(conn.lock());
-            conn.send_tx.try_send(message.clone()).map_err(|e| {
-                BrokerAdapterError::Generic(Box::new(e))
-            })?;
+            let mut conn = conn.try_lock().unwrap();
+            if let Err(e) = conn.send_tx.try_send(message.clone()) {
+                warn!("[Broker/TcpServer] Failed to send new task: {:?}", e);
+                continue;
+            }
         }
         Ok(())
     }
@@ -135,13 +139,23 @@ impl BrokerAdapter for TcpBrokerServer {
         let message = TcpBrokerMessage::ExecuteTask(task.clone(), inputs.clone());
         let connections = self.connections.clone();
         let connections = futures::executor::block_on(connections.lock());
-        for connection in connections.iter() {
-            let conn = connection.clone();
-            let mut conn = futures::executor::block_on(conn.lock());
-            conn.send_tx.try_send(message.clone()).map_err(|e| {
-                BrokerAdapterError::Generic(Box::new(e))
-            })?;
-        }
+
+        // Find connection with matching ID
+        let connection = connections.iter()
+            .find(|conn| {
+                let conn = conn.clone();
+                let conn = conn.try_lock().unwrap();
+                conn.connection_id == task.connection_id
+            })
+            .ok_or(BrokerAdapterError::Generic(Box::new(
+                std::io::Error::new(std::io::ErrorKind::NotFound, "Connection not found")
+            )))?;
+
+        let conn = connection.clone();
+        let mut conn = conn.try_lock().unwrap();
+        conn.send_tx.try_send(message).map_err(|e| {
+            BrokerAdapterError::Generic(Box::new(e))
+        })?;
         Ok(())
     }
 
@@ -149,7 +163,6 @@ impl BrokerAdapter for TcpBrokerServer {
         &mut self,
         _task: &BrokerTaskConfig,
     ) -> Result<DataView, BrokerAdapterError> {
-       
         self.process_incoming_messages();
        
         if let Some((_task_config, outputs)) = self.response_queue.pop() {
@@ -174,13 +187,23 @@ impl BrokerAdapter for TcpBrokerServer {
         let message = TcpBrokerMessage::TaskResponse(task.clone(), outputs.clone());
         let connections = self.connections.clone();
         let connections = futures::executor::block_on(connections.lock());
-        for connection in connections.iter() {
-            let conn = connection.clone();
-            let mut conn = futures::executor::block_on(conn.lock());
-            conn.send_tx.try_send(message.clone()).map_err(|e| {
-                BrokerAdapterError::Generic(Box::new(e))
-            })?;
-        }
+
+        // Find connection with matching ID
+        let connection = connections.iter()
+            .find(|conn| {
+                let conn = conn.clone();
+                let conn = futures::executor::block_on(conn.lock());
+                conn.connection_id == task.connection_id
+            })
+            .ok_or(BrokerAdapterError::Generic(Box::new(
+                std::io::Error::new(std::io::ErrorKind::NotFound, "Connection not found")
+            )))?;
+
+        let conn = connection.clone();
+        let mut conn = futures::executor::block_on(conn.lock());
+        conn.send_tx.try_send(message).map_err(|e| {
+            BrokerAdapterError::Generic(Box::new(e))
+        })?;
         Ok(())
     }
-} 
+}
