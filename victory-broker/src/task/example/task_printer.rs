@@ -1,6 +1,9 @@
 use victory_data_store::{database::view::DataView, topics::TopicKey};
 
-use crate::task::{config::BrokerTaskConfig, subscription::BrokerTaskSubscription, trigger::BrokerTaskTrigger, BrokerTask};
+use crate::task::{
+    config::BrokerTaskConfig, subscription::BrokerTaskSubscription, trigger::BrokerTaskTrigger,
+    BrokerTask,
+};
 
 pub struct TaskPrinter {
     pub subscribe_topic: TopicKey,
@@ -23,7 +26,6 @@ impl BrokerTask for TaskPrinter {
         &mut self,
         inputs: &victory_data_store::database::view::DataView,
     ) -> Result<DataView, anyhow::Error> {
-        
         if let Ok(values) = inputs.get_latest_map(&self.subscribe_topic) {
             // if values is empty, print empty message
 
@@ -35,15 +37,14 @@ impl BrokerTask for TaskPrinter {
             println!("| Topic                 | Value                  |");
             println!("+------------------------+------------------------+");
             for (topic, value) in values {
-                println!(
-                    "| {:<22} | {:<20?} |",
-                    topic,
-                    value
-                );
+                println!("| {:<22} | {:<20?} |", topic, value);
             }
             println!("+------------------------+------------------------+");
         } else {
-            println!("TaskPrinter: No data available for topic '{}'", self.subscribe_topic);
+            println!(
+                "TaskPrinter: No data available for topic '{}'",
+                self.subscribe_topic
+            );
         }
         Ok(DataView::new())
     }

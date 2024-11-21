@@ -1,10 +1,8 @@
-
 pub mod adapters;
 pub mod broker;
 pub mod commander;
-pub mod task;
 pub mod node;
-
+pub mod task;
 
 #[cfg(test)]
 mod tests {
@@ -12,12 +10,17 @@ mod tests {
 
     use victory_data_store::{primitives::Primitives, topics::TopicKey};
 
-    use crate::{adapters::channel::ChannelBrokerAdapter, broker::Broker, commander::{linear::LinearBrokerCommander, mock::MockBrokerCommander}, node::{info::BrokerNodeInfo, BrokerNode}, task::{config::BrokerTaskConfig, example::task_ticker::TaskTicker}};
+    use crate::{
+        adapters::channel::ChannelBrokerAdapter,
+        broker::Broker,
+        commander::{linear::LinearBrokerCommander, mock::MockBrokerCommander},
+        node::{info::BrokerNodeInfo, BrokerNode},
+        task::{config::BrokerTaskConfig, example::task_ticker::TaskTicker},
+    };
     use test_env_log::test;
     #[test]
     fn int_single_task_single_node() {
-
-        let ( adapter_a,  adapter_b) = ChannelBrokerAdapter::new_pair();
+        let (adapter_a, adapter_b) = ChannelBrokerAdapter::new_pair();
         let mut broker = Broker::new(LinearBrokerCommander::new());
         broker.add_adapter(adapter_a);
 
@@ -29,11 +32,11 @@ mod tests {
         node.add_task(Arc::new(Mutex::new(task_a))).unwrap();
 
         let broker_handle = Arc::new(Mutex::new(broker));
-        let broker = broker_handle.clone(); 
+        let broker = broker_handle.clone();
         // Launch broker thread
         let broker_thread = std::thread::spawn(move || {
             let start = std::time::Instant::now();
-         
+
             while start.elapsed().as_secs() < 2 {
                 {
                     let mut broker = broker.lock().unwrap();
@@ -45,7 +48,7 @@ mod tests {
 
         let node_handle = Arc::new(Mutex::new(node));
 
-        // Launch node thread 
+        // Launch node thread
         let node_thread = std::thread::spawn(move || {
             let start = std::time::Instant::now();
             let node = node_handle.clone();
@@ -71,12 +74,10 @@ mod tests {
         // Check the key
         assert_eq!(value[0].topic.display_name(), topic_a.display_name());
         // Check the value
-        let value = match value[0].value{
+        let value = match value[0].value {
             Primitives::Integer(n) => n,
             _ => panic!("Expected a number"),
         };
         assert!(value > 1);
     }
-
-  
 }

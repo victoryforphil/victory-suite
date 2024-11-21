@@ -29,7 +29,7 @@ impl BrokerNode {
             adapter,
             view: DataView::new(),
             task_handles: HashMap::new(),
-            task_configs: HashMap::new()
+            task_configs: HashMap::new(),
         }
     }
 
@@ -42,7 +42,7 @@ impl BrokerNode {
         self.task_handles.insert(task_config.task_id, task_handle);
         self.task_configs
             .insert(task_config.task_id, task_config.clone());
-        
+
         self.adapter.lock().unwrap().send_new_task(&task_config)?;
         Ok(())
     }
@@ -67,7 +67,7 @@ impl BrokerNode {
             let results = task_handle.lock().unwrap().on_execute(&inputs)?;
             adapter.send_response(&task_config, &results)?;
         }
-    
+
         Ok(())
     }
 }

@@ -1,6 +1,6 @@
-use victory_data_store::{database::view::DataView, topics::TopicKey};
 use crate::task::{config::BrokerTaskConfig, trigger::BrokerTaskTrigger, BrokerTask};
 use anyhow::{Error, Result};
+use victory_data_store::{database::view::DataView, topics::TopicKey};
 
 pub enum Operation {
     Add,
@@ -110,4 +110,4 @@ mod tests {
         let result = task_math.on_execute(&inputs);
         assert!(result.is_err());
     }
-} 
+}

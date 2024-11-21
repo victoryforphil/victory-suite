@@ -5,9 +5,16 @@ use victory_data_store::database::{self, view::DataView, Datastore, DatastoreHan
 use victory_wtf::Timepoint;
 
 use crate::{
-    adapters::{AdapterID, BrokerAdapterError, BrokerAdapterHandle}, commander::BrokerCommander, node::info, task::{
-        config::{BrokerCommanderFlags, BrokerTaskConfig}, state::{BrokerTaskState, BrokerTaskStatus}, subscription::SubscriptionMode, trigger::BrokerTaskTrigger, BrokerTaskID
-    }
+    adapters::{AdapterID, BrokerAdapterError, BrokerAdapterHandle},
+    commander::BrokerCommander,
+    node::info,
+    task::{
+        config::{BrokerCommanderFlags, BrokerTaskConfig},
+        state::{BrokerTaskState, BrokerTaskStatus},
+        subscription::SubscriptionMode,
+        trigger::BrokerTaskTrigger,
+        BrokerTaskID,
+    },
 };
 
 pub struct Broker<TCommander> {
@@ -26,7 +33,7 @@ pub enum BrokerError {
     /// Task timed out waiting for response
     #[error("Task timed out waiting for response")]
     TaskTimeout(BrokerTaskConfig),
-    
+
     #[error("Task failed to execute")]
     TaskExecutionFailed(BrokerTaskConfig),
 }
@@ -47,14 +54,13 @@ where
         }
     }
 
-    pub fn add_adapter(&mut self, adapter: BrokerAdapterHandle){
+    pub fn add_adapter(&mut self, adapter: BrokerAdapterHandle) {
         let id = rand::random::<u32>();
         info!("Broker // Adding adapter with id: {:?}", id);
         self.adapters.insert(id, adapter);
     }
 
     pub fn tick(&mut self) -> Result<(), BrokerError> {
-
         // 1. Read new tasks from adapters
         let _ = match self.read_new_tasks() {
             Ok(tasks) => tasks,
@@ -68,15 +74,17 @@ where
         };
 
         if !next_tasks.is_empty() {
-            debug!("Broker // Next tasks: {:?}", next_tasks.iter().map(|t| t.task_id).collect::<Vec<_>>()   );
-        }else{
+            debug!(
+                "Broker // Next tasks: {:?}",
+                next_tasks.iter().map(|t| t.task_id).collect::<Vec<_>>()
+            );
+        } else {
             return Ok(());
         }
         // 2.1 Set next_tasks to Queued state.
         for task in next_tasks {
             self.set_task_status(task.task_id, BrokerTaskStatus::Queued);
         }
-        
 
         let queued_tasks = self.get_tasks_with_status(BrokerTaskStatus::Queued);
 
@@ -92,7 +100,7 @@ where
 
             // Get inputs before spawning thread
             let inputs = self.get_task_inputs(&task_config).unwrap();
-            
+
             // Clone values needed in thread
             let task_id = task_id.clone();
             let task_config = task_config.clone();
@@ -107,10 +115,13 @@ where
 
             // Spawn thread
             let handle = std::thread::spawn(move || {
-                debug!("Broker // Executing task: {:?} using adapter: {:?}", task_id, task_config.adapter_id);
-                
+                debug!(
+                    "Broker // Executing task: {:?} using adapter: {:?}",
+                    task_id, task_config.adapter_id
+                );
+
                 let mut adapter = adapter.lock().unwrap();
-                
+
                 // Execute the task
                 if let Err(e) = adapter.send_execute(&task_config, &inputs) {
                     warn!("Broker // Failed to execute task {:?}: {:?}", task_id, e);
@@ -119,18 +130,27 @@ where
 
                 // Wait for response if task is blocking
                 debug!("Broker // Waiting for response for {:?}", task_id);
-                let task_response = if task_config.flags.contains(&BrokerCommanderFlags::NonBlocking) {
+                let task_response = if task_config
+                    .flags
+                    .contains(&BrokerCommanderFlags::NonBlocking)
+                {
                     // For non-blocking tasks, don't wait for response
-                    debug!("Broker // Task {:?} is non-blocking, not waiting for response", task_id);
+                    debug!(
+                        "Broker // Task {:?} is non-blocking, not waiting for response",
+                        task_id
+                    );
                     Ok(DataView::new())
                 } else {
                     // For blocking tasks, wait with timeout
                     let mut task_response = adapter.recv_response(&task_config);
                     let start_time = std::time::Instant::now();
-                    
+
                     while let Err(BrokerAdapterError::WaitingForTaskResponse) = task_response {
                         if start_time.elapsed() > std::time::Duration::from_millis(250) {
-                            warn!("Broker // Task {:?} timed out waiting for response", task_id);
+                            warn!(
+                                "Broker // Task {:?} timed out waiting for response",
+                                task_id
+                            );
                             return Err(BrokerError::TaskTimeout(task_config));
                         }
                         task_response = adapter.recv_response(&task_config);
@@ -142,8 +162,12 @@ where
                 debug!("Broker // Response for {:?}", task_id);
 
                 // Apply response to datastore
-                datastore.lock().unwrap().apply_view(task_response.unwrap()).unwrap();
-                
+                datastore
+                    .lock()
+                    .unwrap()
+                    .apply_view(task_response.unwrap())
+                    .unwrap();
+
                 Ok(())
             });
 
@@ -157,7 +181,10 @@ where
                     match result {
                         Ok(_) => {
                             // Set final status on success
-                            self.task_states.get_mut(&task_id).unwrap().set_status(BrokerTaskStatus::Completed);
+                            self.task_states
+                                .get_mut(&task_id)
+                                .unwrap()
+                                .set_status(BrokerTaskStatus::Completed);
                         }
                         Err(e) => {
                             // Handle task error
@@ -173,7 +200,7 @@ where
                     warn!("Broker // Thread panic for task {:?}: {:?}", task_id, e);
                     return Err(BrokerError::Generic(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        "Thread panicked"
+                        "Thread panicked",
                     ))));
                 }
             }
@@ -183,7 +210,10 @@ where
     }
 
     // Task querying functions
-    pub fn get_tasks_with_status(&self, status: BrokerTaskStatus) -> HashMap<BrokerTaskID, BrokerTaskConfig> {
+    pub fn get_tasks_with_status(
+        &self,
+        status: BrokerTaskStatus,
+    ) -> HashMap<BrokerTaskID, BrokerTaskConfig> {
         self.task_states
             .iter()
             .filter(|(_, state)| state.status == status)
@@ -191,8 +221,11 @@ where
             .collect()
     }
 
-    pub fn set_task_status(&mut self, task_id: BrokerTaskID, status: BrokerTaskStatus){
-        self.task_states.get_mut(&task_id).unwrap().set_status(status);
+    pub fn set_task_status(&mut self, task_id: BrokerTaskID, status: BrokerTaskStatus) {
+        self.task_states
+            .get_mut(&task_id)
+            .unwrap()
+            .set_status(status);
     }
 }
 
@@ -205,21 +238,25 @@ where
         for (adapter_id, adapter_handle) in self.adapters.iter_mut() {
             let mut adapter = adapter_handle.lock().unwrap();
             let mut new_tasks = adapter.get_new_tasks()?;
-        
+
             for task in &mut new_tasks {
-                debug!("Broker // New Task {:?} read from adapter {:?}", task.task_id, adapter_id);
-                task.adapter_id = adapter_id.clone();   
+                debug!(
+                    "Broker // New Task {:?} read from adapter {:?}",
+                    task.task_id, adapter_id
+                );
+                task.adapter_id = adapter_id.clone();
                 // Create a new task state and insert it into the task_states map
-                self.task_states.insert(task.task_id, BrokerTaskState::new(task.task_id));
+                self.task_states
+                    .insert(task.task_id, BrokerTaskState::new(task.task_id));
                 // Insert the task config into the task_configs map
-                self.task_configs.insert(task.task_id, task.clone() );
+                self.task_configs.insert(task.task_id, task.clone());
 
                 self.commander.add_task(task.clone())?;
             }
         }
         Ok(())
     }
-    
+
     fn check_trigger(&self, task: &BrokerTaskConfig) -> Result<bool, anyhow::Error> {
         match &task.trigger {
             BrokerTaskTrigger::Always => Ok(true),
@@ -241,14 +278,24 @@ where
         let subscriptions = &task.subscriptions;
         let mut inputs = DataView::new();
         for subscription in subscriptions {
-            match subscription.mode{
+            match subscription.mode {
                 SubscriptionMode::Latest => {
-                    inputs = inputs.add_query(&mut self.datastore.lock().unwrap(), &subscription.topic_query).unwrap();
-                },
+                    inputs = inputs
+                        .add_query(
+                            &mut self.datastore.lock().unwrap(),
+                            &subscription.topic_query,
+                        )
+                        .unwrap();
+                }
                 SubscriptionMode::NewValues => {
                     warn!("NewValues subscription not implemented");
-                    inputs = inputs.add_query(&mut self.datastore.lock().unwrap(), &subscription.topic_query).unwrap();
-                },
+                    inputs = inputs
+                        .add_query(
+                            &mut self.datastore.lock().unwrap(),
+                            &subscription.topic_query,
+                        )
+                        .unwrap();
+                }
             }
         }
         Ok(inputs)
@@ -262,11 +309,13 @@ mod broker_tests {
     use victory_data_store::topics::TopicKey;
     use victory_wtf::Timespan;
 
-    use crate::{adapters::mock::MockBrokerAdapter, commander::mock::MockBrokerCommander, task::subscription::BrokerTaskSubscription};
+    use crate::{
+        adapters::mock::MockBrokerAdapter, commander::mock::MockBrokerCommander,
+        task::subscription::BrokerTaskSubscription,
+    };
 
     use super::*;
     use test_env_log::test;
-
 
     /// Test the main tick flow
     /// 1. Create a new broker
@@ -274,17 +323,25 @@ mod broker_tests {
     /// 3. Add a task to the adapter
 
     #[test]
-    fn test_tick(){
+    fn test_tick() {
         let mut broker = Broker::new(MockBrokerCommander::new());
         let mut adapter = MockBrokerAdapter::new();
-        
+
         let mut task_a = BrokerTaskConfig::new_with_id(0, "test_task_a");
-        task_a.subscriptions.push(BrokerTaskSubscription::new_latest(&TopicKey::from_str("test/a")));
+        task_a
+            .subscriptions
+            .push(BrokerTaskSubscription::new_latest(&TopicKey::from_str(
+                "test/a",
+            )));
         let mut task_b = BrokerTaskConfig::new_with_id(1, "test_task_b");
-        task_b.subscriptions.push(BrokerTaskSubscription::new_latest(&TopicKey::from_str("test/b")));
+        task_b
+            .subscriptions
+            .push(BrokerTaskSubscription::new_latest(&TopicKey::from_str(
+                "test/b",
+            )));
 
         adapter.new_tasks.push(task_a);
-        adapter.new_tasks.push(task_b); 
+        adapter.new_tasks.push(task_b);
 
         broker.adapters.insert(0, Arc::new(Mutex::new(adapter)));
         broker.tick().unwrap();
@@ -303,7 +360,7 @@ mod broker_tests {
     /// 4. Add a task to the broker (with status Queued)
     /// 5. Call get_tasks_with_status with Queued
     /// 6. Check that the returned HashMap has one entry
-    
+
     #[test]
     fn test_get_tasks_with_status() {
         let mut broker = Broker::new(MockBrokerCommander::new());
@@ -322,7 +379,7 @@ mod broker_tests {
     }
 
     #[test]
-    fn test_check_trigger_always(){
+    fn test_check_trigger_always() {
         let mut broker = Broker::new(MockBrokerCommander::new());
         let mut task = BrokerTaskConfig::new_with_id(0, "test_task");
         task.trigger = BrokerTaskTrigger::Always;
@@ -332,7 +389,7 @@ mod broker_tests {
     }
 
     #[test]
-    fn test_check_trigger_rate(){
+    fn test_check_trigger_rate() {
         let mut broker = Broker::new(MockBrokerCommander::new());
         let mut task = BrokerTaskConfig::new_with_id(0, "test_task");
 
@@ -346,10 +403,14 @@ mod broker_tests {
         assert!(trigger.is_ok());
         // Time is 0, so trigger should return true
         assert!(trigger.unwrap(), "Trigger should return true");
-        
+
         let broker_time = broker.broker_time.clone();
         // Set the last execution time to now
-        broker.task_states.get_mut(&0).unwrap().set_last_execution_time(broker_time.clone());
+        broker
+            .task_states
+            .get_mut(&0)
+            .unwrap()
+            .set_last_execution_time(broker_time.clone());
 
         // Set the time to 0.5 seconds in the future
         broker.broker_time = broker_time.clone() + Timespan::new_secs(0.5);
@@ -357,7 +418,6 @@ mod broker_tests {
         assert!(trigger.is_ok());
         // Time is 0.5 seconds in the future, so trigger should return false
         assert!(!trigger.unwrap(), "Trigger should return false");
-
 
         // Set the time to 1.5 seconds in the future
         broker.broker_time = broker_time.clone() + Timespan::new_secs(1.5);
@@ -374,11 +434,13 @@ mod broker_tests {
     /// 4. Check that the task was added to the task_configs map
     /// 5. Check that the task state was added to the task_states map
     #[test]
-    fn test_read_new_tasks(){
+    fn test_read_new_tasks() {
         let mut broker = Broker::new(MockBrokerCommander::new());
         let mut adapter = MockBrokerAdapter::new();
         // Add a new task to the adapter
-        adapter.new_tasks.push(BrokerTaskConfig::new_with_id(0, "test_task"));
+        adapter
+            .new_tasks
+            .push(BrokerTaskConfig::new_with_id(0, "test_task"));
         broker.adapters.insert(0, Arc::new(Mutex::new(adapter)));
         broker.read_new_tasks().unwrap();
         // Check that the task was added to the task_configs map

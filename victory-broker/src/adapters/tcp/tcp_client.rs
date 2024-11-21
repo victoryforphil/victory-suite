@@ -25,8 +25,7 @@ impl TcpBrokerClient {
         let stream = TcpStream::connect(address)
             .await
             .map_err(|e| BrokerAdapterError::Generic(Box::new(e)))?;
-        let connection = TcpBrokerConnection::new(stream)
-            .await;
+        let connection = TcpBrokerConnection::new(stream).await;
 
         Ok(Self {
             address: address.to_string(),

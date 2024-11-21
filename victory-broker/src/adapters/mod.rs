@@ -1,4 +1,3 @@
-
 pub type AdapterID = u32;
 pub type ConnectionID = u32;
 
@@ -8,9 +7,9 @@ use victory_data_store::database::view::DataView;
 
 use crate::task::config::BrokerTaskConfig;
 
+pub mod channel;
 pub mod mock;
 pub mod tcp;
-pub mod channel;
 pub type BrokerAdapterHandle = Arc<Mutex<dyn BrokerAdapter>>;
 
 #[derive(thiserror::Error, Debug)]
@@ -26,9 +25,17 @@ pub enum BrokerAdapterError {
 pub trait BrokerAdapter: Send {
     fn get_new_tasks(&mut self) -> Result<Vec<BrokerTaskConfig>, BrokerAdapterError>;
     fn send_new_task(&mut self, task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError>;
-    fn send_execute(&mut self, task: &BrokerTaskConfig, inputs: &DataView) -> Result<(), BrokerAdapterError>;
+    fn send_execute(
+        &mut self,
+        task: &BrokerTaskConfig,
+        inputs: &DataView,
+    ) -> Result<(), BrokerAdapterError>;
     fn recv_response(&mut self, task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError>;
 
     fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, DataView)>, BrokerAdapterError>;
-    fn send_response(&mut self, task: &BrokerTaskConfig, outputs: &DataView) -> Result<(), BrokerAdapterError>;
+    fn send_response(
+        &mut self,
+        task: &BrokerTaskConfig,
+        outputs: &DataView,
+    ) -> Result<(), BrokerAdapterError>;
 }

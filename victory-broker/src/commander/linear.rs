@@ -26,13 +26,12 @@ impl BrokerCommander for LinearBrokerCommander {
 
     fn get_next_tasks(&mut self) -> Result<Vec<BrokerTaskConfig>, BrokerCommanderError> {
         if self.tasks.is_empty() {
-            
             return Ok(Vec::new());
         }
 
         // Get current task
         let task = self.tasks[self.current_task].clone();
-        
+
         // Increment and wrap around
         self.current_task = (self.current_task + 1) % self.tasks.len();
 
@@ -48,18 +47,16 @@ impl BrokerCommander for LinearBrokerCommander {
 }
 
 #[cfg(test)]
-mod linear_commander_tests{
+mod linear_commander_tests {
     use crate::task::config::BrokerTaskConfig;
 
     use super::*;
 
     #[test]
-    fn test_add_task(){
+    fn test_add_task() {
         let mut commander = LinearBrokerCommander::new();
         let new_with_id = BrokerTaskConfig::new_with_id(0, "test");
         let task = new_with_id;
         commander.add_task(task).unwrap();
     }
-
-  
 }
