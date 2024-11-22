@@ -119,12 +119,14 @@ impl DataView {
 
 #[cfg(test)]
 mod tests {
-    
+
     use serde::{Deserialize, Serialize};
     use victory_wtf::Timepoint;
 
-    use crate::{database::{view::DataView, Datastore}, topics::TopicKey};
-
+    use crate::{
+        database::{view::DataView, Datastore},
+        topics::TopicKey,
+    };
 
     #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
     struct TestStructA {

@@ -67,9 +67,7 @@ impl DataStoreListener for MockDataStoreListener {
 mod tests {
     use victory_wtf::Timepoint;
 
-    use crate::{
-        database::Datastore, topics::TopicKeyProvider,
-    };
+    use crate::{database::Datastore, topics::TopicKeyProvider};
 
     use super::*;
 

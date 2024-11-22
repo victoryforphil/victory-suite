@@ -2,13 +2,11 @@ use std::ops::{Add, Sub};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub struct Timecode {
     pub(crate) secs: u64,
     pub(crate) nanos: u32,
 }
-
 
 impl Timecode {
     pub fn new_secs(secs: f64) -> Timecode {

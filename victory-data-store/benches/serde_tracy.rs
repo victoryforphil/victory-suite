@@ -8,7 +8,6 @@ use victory_data_store::primitives::Primitives;
 use victory_data_store::topics::TopicKey;
 use victory_data_store::{primitives::serde::serialize::to_map, test_util::BigState};
 
-
 fn main() {
     // Run registered benchmarks.
 

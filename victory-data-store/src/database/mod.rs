@@ -405,7 +405,6 @@ impl Datastore {
 
 #[cfg(test)]
 mod tests {
-    
 
     use crate::database::*;
 

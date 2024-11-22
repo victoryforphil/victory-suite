@@ -1,10 +1,6 @@
 use victory_data_store::{database::view::DataView, topics::TopicKey};
 
-use crate::task::{
-    config::BrokerTaskConfig,
-    trigger::BrokerTaskTrigger,
-    BrokerTask,
-};
+use crate::task::{config::BrokerTaskConfig, trigger::BrokerTaskTrigger, BrokerTask};
 
 pub struct TaskTicker {
     pub publish_topic: TopicKey,
@@ -22,8 +18,7 @@ impl TaskTicker {
 
 impl BrokerTask for TaskTicker {
     fn get_config(&self) -> crate::task::config::BrokerTaskConfig {
-        BrokerTaskConfig::new("TaskTicker")
-            .with_trigger(BrokerTaskTrigger::Always)
+        BrokerTaskConfig::new("TaskTicker").with_trigger(BrokerTaskTrigger::Always)
     }
 
     fn on_execute(
