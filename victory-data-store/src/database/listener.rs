@@ -65,10 +65,10 @@ impl DataStoreListener for MockDataStoreListener {
 
 #[cfg(test)]
 mod tests {
-    use victory_wtf::{Timecode, Timepoint};
+    use victory_wtf::Timepoint;
 
     use crate::{
-        buckets::Bucket, database::Datastore, primitives::Primitives, topics::TopicKeyProvider,
+        database::Datastore, topics::TopicKeyProvider,
     };
 
     use super::*;

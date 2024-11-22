@@ -1,6 +1,5 @@
 use crate::{
-    buckets::{Bucket, BucketHandle},
-    datapoints::Datapoint,
+    buckets::BucketHandle,
     primitives::{
         serde::{deserializer::PrimitiveDeserializer, serialize::to_map},
         Primitives,
@@ -8,16 +7,11 @@ use crate::{
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
 
-use log::{debug, info, trace, warn};
+use log::warn;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
-};
-use thiserror::Error;
-use victory_wtf::Timepoint;
+use std::collections::HashMap;
 
-use super::{listener::DataStoreListener, Datastore, DatastoreError};
+use super::{Datastore, DatastoreError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataView {
@@ -125,7 +119,7 @@ impl DataView {
 
 #[cfg(test)]
 mod tests {
-    use log::debug;
+    
     use serde::{Deserialize, Serialize};
     use victory_wtf::Timepoint;
 

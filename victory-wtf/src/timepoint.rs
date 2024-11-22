@@ -1,7 +1,6 @@
 use std::{
     ops::{Add, Sub},
-    sync::Arc,
-    time::{Instant, SystemTime, UNIX_EPOCH},
+    time::SystemTime,
 };
 
 use crate::timespan::Timespan;

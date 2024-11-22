@@ -3,20 +3,16 @@ use std::ops::{Add, Sub};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct Timecode {
     pub(crate) secs: u64,
     pub(crate) nanos: u32,
 }
 
-impl Default for Timecode {
-    fn default() -> Self {
-        Timecode { secs: 0, nanos: 0 }
-    }
-}
 
 impl Timecode {
     pub fn new_secs(secs: f64) -> Timecode {
-        let secs = secs as f64;
+        let secs = secs;
         let nanos = (secs.fract() * 1_000_000_000.0) as u32;
         Timecode {
             secs: secs as u64,

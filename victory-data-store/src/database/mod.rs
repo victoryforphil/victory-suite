@@ -8,7 +8,7 @@ use crate::{
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
 use listener::DataStoreListener;
-use log::{debug, info, trace, warn};
+use log::{debug, trace, warn};
 use retention::RetentionPolicy;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
@@ -16,7 +16,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
-use tracing::{info_span, instrument, Instrument};
+use tracing::instrument;
 use victory_wtf::Timepoint;
 use view::DataView;
 
@@ -367,7 +367,7 @@ impl Datastore {
         );
         self.listeners
             .entry(topic_query.clone().handle())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(listener.clone());
         Ok(())
     }
@@ -405,7 +405,7 @@ impl Datastore {
 
 #[cfg(test)]
 mod tests {
-    use log::debug;
+    
 
     use crate::database::*;
 

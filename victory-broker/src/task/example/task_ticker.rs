@@ -1,7 +1,7 @@
 use victory_data_store::{database::view::DataView, topics::TopicKey};
 
 use crate::task::{
-    config::{BrokerCommanderFlags, BrokerTaskConfig},
+    config::BrokerTaskConfig,
     trigger::BrokerTaskTrigger,
     BrokerTask,
 };

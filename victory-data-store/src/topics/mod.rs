@@ -1,9 +1,8 @@
 use std::{
-    hash::{BuildHasher, DefaultHasher, Hash, Hasher},
+    hash::{DefaultHasher, Hash, Hasher},
     sync::Arc,
 };
 
-use log::debug;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -210,7 +209,7 @@ impl TopicKey {
     #[instrument(skip_all)]
     pub fn add_suffix(&self, suffix: &TopicKey) -> TopicKey {
         let mut new_key = self.clone();
-        new_key.add_suffix_mut(&suffix);
+        new_key.add_suffix_mut(suffix);
         new_key
     }
 
