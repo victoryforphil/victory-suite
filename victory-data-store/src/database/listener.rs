@@ -68,8 +68,7 @@ mod tests {
     use victory_wtf::{Timecode, Timepoint};
 
     use crate::{
-        buckets::Bucket, database::Datastore, primitives::Primitives,
-        sync::adapters::mock::MockSyncAdapter, topics::TopicKeyProvider,
+        buckets::Bucket, database::Datastore, primitives::Primitives, topics::TopicKeyProvider,
     };
 
     use super::*;

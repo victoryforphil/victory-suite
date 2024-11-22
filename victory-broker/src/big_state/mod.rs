@@ -1,6 +1,5 @@
 use std::collections::HashMap;
-pub mod big_pub;
-pub mod big_sub;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
@@ -40,34 +39,3 @@ impl BigState {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::sync::{Arc, Mutex};
-
-    use big_pub::BigStatePublisher;
-    use big_sub::BigStateSubscriber;
-    use victory_wtf::{Timepoint, Timespan};
-
-    use crate::system::runner::BasherSysRunner;
-
-    use super::*;
-
-    #[test]
-    fn test_big_state() {
-        pretty_env_logger::init();
-        let mut runner = BasherSysRunner::new();
-        let big_pub = BigStatePublisher::new();
-        let big_sub = BigStateSubscriber::new();
-        runner.add_system(Arc::new(Mutex::new(big_pub)));
-        runner.add_system(Arc::new(Mutex::new(big_sub)));
-        let now = Timepoint::now();
-        runner.dt = Timespan::new_hz(100.0);
-        runner.set_end_time(Timepoint::new_secs(10.0));
-        runner.run();
-        let end = Timepoint::now();
-        let duration = end - now;
-        println!("{:?}", duration.secs());
-
-        assert!(duration.secs() < 20.0);
-    }
-}

@@ -3,6 +3,7 @@ pub mod broker;
 pub mod commander;
 pub mod node;
 pub mod task;
+pub mod big_state;
 
 #[cfg(test)]
 mod tests {

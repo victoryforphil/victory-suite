@@ -1,7 +1,7 @@
 use victory_data_store::{database::view::DataView, topics::TopicKey};
 
 use crate::task::{
-    config::BrokerTaskConfig, subscription::BrokerTaskSubscription, trigger::BrokerTaskTrigger,
+    config::{BrokerCommanderFlags, BrokerTaskConfig}, subscription::BrokerTaskSubscription, trigger::BrokerTaskTrigger,
     BrokerTask,
 };
 
@@ -20,6 +20,7 @@ impl BrokerTask for TaskPrinter {
         BrokerTaskConfig::new("TaskPrinter")
             .with_trigger(BrokerTaskTrigger::Always)
             .with_subscription(BrokerTaskSubscription::new_latest(&self.subscribe_topic))
+            .with_flag(BrokerCommanderFlags::NonBlocking)
     }
 
     fn on_execute(
