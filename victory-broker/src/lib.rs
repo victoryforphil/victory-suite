@@ -10,6 +10,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use victory_data_store::{primitives::Primitives, topics::TopicKey};
+    use victory_wtf::Timespan;
 
     use crate::{
         adapters::channel::ChannelBrokerAdapter,
@@ -41,7 +42,7 @@ mod tests {
             while start.elapsed().as_secs() < 2 {
                 {
                     let mut broker = broker.lock().unwrap();
-                    broker.tick().unwrap();
+                    broker.tick(Timespan::new_ms(50.0)).unwrap();
                 }
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
