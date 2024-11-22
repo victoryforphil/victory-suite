@@ -75,7 +75,7 @@ where
         if !next_tasks.is_empty() {
             debug!(
                 "Broker // Next tasks: {:?}",
-                next_tasks.iter().map(|t| t.task_id).collect::<Vec<_>>()
+                next_tasks.iter().map(|t| t.name.clone()).collect::<Vec<_>>()
             );
         } else {
             return Ok(());
@@ -115,20 +115,20 @@ where
             // Spawn thread
             let handle = std::thread::spawn(move || {
                 debug!(
-                    "Broker // Executing task: {:?} using adapter: {:?}",
-                    task_id, task_config.adapter_id
+                    "Broker // Executing task: {:?} using adapter: {:?} with {} inputs",
+                    task_config.name, task_config.adapter_id, inputs.maps.keys().len()
                 );
 
                 let mut adapter = adapter.lock().unwrap();
 
                 // Execute the task
                 if let Err(e) = adapter.send_execute(&task_config, &inputs) {
-                    warn!("Broker // Failed to execute task {:?}: {:?}", task_id, e);
+                    warn!("Broker // Failed to execute task {:?}: {:?}", task_config.name, e);
                     return Err(BrokerError::TaskExecutionFailed(task_config));
                 }
 
                 // Wait for response if task is blocking
-                debug!("Broker // Waiting for response for {:?}", task_id);
+                debug!("Broker // Waiting for response for {:?}", task_config.name);
                 let task_response = if task_config
                     .flags
                     .contains(&BrokerCommanderFlags::NonBlocking)
@@ -136,7 +136,7 @@ where
                     // For non-blocking tasks, don't wait for response
                     debug!(
                         "Broker // Task {:?} is non-blocking, not waiting for response",
-                        task_id
+                        task_config.name
                     );
                     Ok(DataView::new())
                 } else {
@@ -148,7 +148,7 @@ where
                         if start_time.elapsed() > std::time::Duration::from_millis(250) {
                             warn!(
                                 "Broker // Task {:?} timed out waiting for response",
-                                task_id
+                                task_config.name
                             );
                             return Err(BrokerError::TaskTimeout(task_config));
                         }
@@ -158,7 +158,11 @@ where
                     task_response
                 };
 
-                debug!("Broker // Response for {:?}", task_id);
+                debug!(
+                    "Broker // Response for {:?} with {} topics",
+                    task_config.name,
+                    task_response.as_ref().unwrap().maps.keys().len()
+                );
 
                 // Apply response to datastore
                 datastore
@@ -187,7 +191,8 @@ where
                         }
                         Err(e) => {
                             // Handle task error
-                            warn!("Broker // Task {:?} failed: {:?}", task_id, e);
+                            let task_name = self.task_configs.get(&task_id).unwrap().name.clone();
+                            warn!("Broker // Task {:?} failed: {:?}", task_name, e);
                             self.task_states.remove(&task_id);
                             self.task_configs.remove(&task_id);
                             self.commander.remove_task(task_id).unwrap();
@@ -196,7 +201,8 @@ where
                     }
                 }
                 Err(e) => {
-                    warn!("Broker // Thread panic for task {:?}: {:?}", task_id, e);
+                    let task_name = self.task_configs.get(&task_id).unwrap().name.clone();
+                    warn!("Broker // Thread panic for task {:?}: {:?}", task_name, e);
                     return Err(BrokerError::Generic(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         "Thread panicked",
@@ -241,7 +247,7 @@ where
             for task in &mut new_tasks {
                 debug!(
                     "Broker // New Task {:?} read from adapter {:?}",
-                    task.task_id, adapter_id
+                    task.name, adapter_id
                 );
                 task.adapter_id = *adapter_id;
                 // Create a new task state and insert it into the task_states map

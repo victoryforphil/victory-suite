@@ -23,12 +23,16 @@ impl BrokerTask for TaskTicker {
 
     fn on_execute(
         &mut self,
-        inputs: &victory_data_store::database::view::DataView,
+        _inputs: &victory_data_store::database::view::DataView,
     ) -> Result<victory_data_store::database::view::DataView, anyhow::Error> {
         let mut outputs = DataView::new();
         self.tick_value += 1;
         outputs.add_latest(&self.publish_topic, self.tick_value);
         Ok(outputs)
+    }
+    
+    fn init(&mut self) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 }
 

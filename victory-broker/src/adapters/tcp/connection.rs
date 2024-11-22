@@ -37,7 +37,7 @@ impl TcpBrokerConnection {
         let (mut read_half, mut write_half) = stream.into_split();
         // Spawn read task
         tokio::spawn(async move {
-            let mut buffer = Vec::with_capacity(1024 * 5); // 5kb buffer
+            let mut buffer = Vec::with_capacity(1024 * 10); // 5kb buffer
             let mut temp_buffer = [0u8; 1024];
 
             loop {
@@ -87,7 +87,7 @@ impl TcpBrokerConnection {
                         }
 
                         // Prevent buffer from growing too large
-                        if buffer.len() > 1024 * 5 {
+                        if buffer.len() > 1024 * 20 {
                             // 5kb limit
                             warn!("[Broker/TcpConnection] Buffer too large, clearing");
                             buffer.clear();

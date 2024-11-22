@@ -32,6 +32,13 @@ impl BrokerNode {
         }
     }
 
+    pub fn init(&mut self) -> Result<(), anyhow::Error> {
+        for task_handle in self.task_handles.values_mut() {
+            task_handle.lock().unwrap().init()?;
+        }
+        Ok(())
+    }
+
     pub fn add_task(&mut self, task_handle: BrokerTaskHandle) -> Result<(), anyhow::Error> {
         let task_config = task_handle.lock().unwrap().get_config();
         info!(
@@ -55,8 +62,8 @@ impl BrokerNode {
         // TODO: Parallelize this so tasks can execute in parallel
         for (task_config, inputs) in execute_requests.iter() {
             debug!(
-                "Node {:?} // Executing task {:?} with inputs {:?}",
-                self.info.node_id, task_config.task_id, inputs
+                "Node {:?} // Executing task {:?} with {:?} inputs",
+                self.info.name, task_config.name, inputs.maps.keys().len()
             );
 
             let task_handle = self

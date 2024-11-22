@@ -18,6 +18,10 @@ impl TaskPrinter {
 }
 
 impl BrokerTask for TaskPrinter {
+    fn init(&mut self) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+
     fn get_config(&self) -> BrokerTaskConfig {
         BrokerTaskConfig::new("TaskPrinter")
             .with_trigger(BrokerTaskTrigger::Always)
