@@ -3,13 +3,7 @@ name = "victory-data-store"
 version = "0.0.1"
 edition = "2021"
 
-[[bin]]
-name = "sync_tcp_server"
-path = "bin/tcp_server.rs"
 
-[[bin]]
-name = "sync_tcp_client"
-path = "bin/tcp_client.rs"
 
 [dependencies]
 serde = { version = "1.0.210", features = ["derive", "rc"] }

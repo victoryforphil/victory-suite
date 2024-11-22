@@ -5,7 +5,7 @@ use tracing::instrument;
 
 use crate::{
     primitives::Primitives,
-    topics::{TopicKey, TopicKeyHandle, TopicKeySection},
+    topics::{TopicKey, TopicKeyHandle},
 };
 #[allow(unused_imports)]
 #[allow(unused_variables)]

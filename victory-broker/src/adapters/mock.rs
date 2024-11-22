@@ -1,61 +1,99 @@
-use std::collections::HashMap;
+use victory_data_store::database::view::DataView;
 
-use log::debug;
+use crate::task::config::BrokerTaskConfig;
 
-use crate::{channel::PubSubChannelIDType, messages::PubSubMessage};
+use super::{BrokerAdapter, BrokerAdapterError};
 
-use super::PubSubAdapter;
+#[derive(Default)]
 
-pub struct MockPubSubAdapter {
-    read_buffer: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>,
-    write_buffer: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>,
+pub struct MockBrokerAdapter {
+    pub new_tasks: Vec<BrokerTaskConfig>,
+    pub executed_tasks: Vec<(BrokerTaskConfig, DataView)>,
 }
 
-impl MockPubSubAdapter {
+impl MockBrokerAdapter {
     pub fn new() -> Self {
-        MockPubSubAdapter {
-            read_buffer: HashMap::new(),
-            write_buffer: HashMap::new(),
+        Self {
+            new_tasks: vec![],
+            executed_tasks: vec![],
         }
-    }
-    pub fn channel_ids(&self) -> Vec<PubSubChannelIDType> {
-        self.write_buffer.keys().cloned().collect()
-    }
-    pub fn channel_read(&mut self, channel_id: PubSubChannelIDType) -> Vec<PubSubMessage> {
-        self.write_buffer
-            .remove(&channel_id)
-            .unwrap_or_else(Vec::new)
-    }
-
-    pub fn channel_write(&mut self, channel_id: PubSubChannelIDType, messages: Vec<PubSubMessage>) {
-        self.read_buffer
-            .entry(channel_id)
-            .or_insert_with(Vec::new)
-            .extend(messages);
     }
 }
 
-impl PubSubAdapter for MockPubSubAdapter {
-    fn read(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>> {
-        // Drain read the buffer
-        let mut buffer = HashMap::new();
-        std::mem::swap(&mut self.read_buffer, &mut buffer);
-        buffer
+impl BrokerAdapter for MockBrokerAdapter {
+    fn get_new_tasks(&mut self) -> Result<Vec<BrokerTaskConfig>, BrokerAdapterError> {
+        Ok(self.new_tasks.drain(..).collect())
     }
 
-    fn write(&mut self, to_send: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>) {
-        debug!("MockPubSubAdapter::write: {:?}", to_send.len());
-        for (channel_id, messages) in to_send {
-            self.write_buffer
-                .entry(channel_id)
-                .or_insert_with(Vec::new)
-                .extend(messages);
-        }
-
-        debug!("Mock Write Buffer Length {:?}", self.write_buffer.len());
+    fn send_execute(
+        &mut self,
+        task: &BrokerTaskConfig,
+        inputs: &DataView,
+    ) -> Result<(), BrokerAdapterError> {
+        self.executed_tasks.push((task.clone(), inputs.clone()));
+        Ok(())
     }
 
-    fn get_name(&self) -> String {
-        "MockPubSubAdapter".to_string()
+    fn recv_response(&mut self, task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError> {
+        Ok(DataView::new())
+    }
+
+    fn send_new_task(&mut self, task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError> {
+        todo!()
+    }
+
+    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, DataView)>, BrokerAdapterError> {
+        todo!()
+    }
+
+    fn send_response(
+        &mut self,
+        task: &BrokerTaskConfig,
+        outputs: &DataView,
+    ) -> Result<(), BrokerAdapterError> {
+        todo!()
+    }
+}
+
+#[cfg(test)]
+mod broker_adapter_tests {
+    use super::*;
+
+    /// Test the get_new_tasks method
+    /// 1. Add a new task to the adapter
+    /// 2. Call get_new_tasks
+    /// 3. Check that the task was returned
+    #[test]
+    fn test_mock_adapter_get_new_tasks() {
+        let mut adapter = MockBrokerAdapter::new();
+        let tasks = vec![BrokerTaskConfig::new_with_id(0, "test_task")];
+        adapter.new_tasks = tasks.clone();
+        let new_tasks = adapter.get_new_tasks().unwrap();
+        assert_eq!(new_tasks.len(), 1);
+        assert_eq!(new_tasks[0].task_id, tasks[0].task_id);
+    }
+
+    /// Test the execute_task method
+    /// 1. Call the execute_task method with a task and inputs
+    /// 2. Check that the task and inputs were added to the executed_tasks vector
+    #[test]
+    fn test_mock_adapter_execute_task() {
+        let mut adapter = MockBrokerAdapter::new();
+        let task = BrokerTaskConfig::new_with_id(0, "test_task");
+        let inputs = DataView::new();
+        adapter.send_execute(&task, &inputs).unwrap();
+        assert_eq!(adapter.executed_tasks.len(), 1);
+        assert_eq!(adapter.executed_tasks[0].0.task_id, task.task_id);
+    }
+
+    /// Test the check_task_response method
+    /// 1. Call the check_task_response method with a task
+    /// 2. Check for an Ok result
+    #[test]
+    fn test_mock_adapter_check_task_response() {
+        let mut adapter = MockBrokerAdapter::new();
+        let task = BrokerTaskConfig::new_with_id(0, "test_task");
+        let response = adapter.recv_response(&task);
+        assert!(response.is_ok());
     }
 }

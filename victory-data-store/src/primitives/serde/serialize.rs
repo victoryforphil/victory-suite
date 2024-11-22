@@ -1,10 +1,10 @@
 use serde::{ser, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 use tracing::instrument;
 
 use crate::{
     primitives::{blob::VicBlob, Primitives},
-    topics::{TopicKey, TopicKeyHandle, TopicKeySection},
+    topics::{TopicKey, TopicKeyHandle},
 };
 
 // Create a global copy for _type using a lazy static

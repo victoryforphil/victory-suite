@@ -1,104 +1,118 @@
-use std::{
-    collections::HashMap,
-    io::{Read, Write},
-    net::TcpStream,
-    sync::{Arc, Mutex},
+use log::info;
+use tokio::net::TcpStream;
+
+use super::{
+    connection::{TcpBrokerConnection, TcpBrokerConnectionHandle},
+    message::TcpBrokerMessage,
 };
+use crate::adapters::{BrokerAdapter, BrokerAdapterError};
+use crate::task::config::BrokerTaskConfig;
+use victory_data_store::database::view::DataView;
 
-use log::{debug, info, trace, warn};
-
-use crate::{
-    adapters::{tcp::TCPPacket, PubSubAdapter},
-    channel::PubSubChannelIDType,
-    messages::PubSubMessage,
-};
-
-#[derive(Debug, Clone)]
-pub struct TCPClientOptions {
-    pub port: u16,
-    pub address: String,
+pub struct TcpBrokerClient {
+    address: String,
+    connection: TcpBrokerConnectionHandle,
+    // Internal queues for managing tasks and responses
+    new_tasks: Vec<BrokerTaskConfig>,
+    execute_queue: Vec<(BrokerTaskConfig, DataView)>,
+    response_queue: Vec<(BrokerTaskConfig, DataView)>,
 }
 
-impl TCPClientOptions {
-    pub fn new(port: u16, address: String) -> TCPClientOptions {
-        TCPClientOptions { port, address }
-    }
+impl TcpBrokerClient {
+    pub async fn new(address: &str) -> Result<Self, BrokerAdapterError> {
+        info!("[Broker/TcpClient] Connecting to {}", address);
+        let stream = TcpStream::connect(address)
+            .await
+            .map_err(|e| BrokerAdapterError::Generic(Box::new(e)))?;
+        let connection = TcpBrokerConnection::new(stream).await;
 
-    pub fn from_url(url: &str) -> TCPClientOptions {
-        let parts: Vec<&str> = url.split(":").collect();
-        let port = parts[1].parse::<u16>().unwrap();
-        let address = parts[0].to_string();
-        TCPClientOptions { port, address }
-    }
-
-    pub fn to_url(&self) -> String {
-        format!("{}:{}", self.address, self.port)
-    }
-}
-
-pub struct TCPClientAdapter {
-    options: TCPClientOptions,
-    stream: Arc<Mutex<TcpStream>>,
-    id: Option<PubSubChannelIDType>,
-    buffer: Vec<u8>,
-}
-
-impl TCPClientAdapter {
-    pub fn new(options: TCPClientOptions) -> Result<TCPClientAdapter, Box<dyn std::error::Error>> {
-        let url = options.to_url();
-        info!("Connecting to: {}", url);
-        let stream = TcpStream::connect(url)?;
-        stream.set_nonblocking(true)?;
-        stream.set_nodelay(true)?;
-        Ok(TCPClientAdapter {
-            options,
-            stream: Arc::new(Mutex::new(stream)),
-            id: None,
-            buffer: vec![],
+        Ok(Self {
+            address: address.to_string(),
+            connection,
+            new_tasks: Vec::new(),
+            execute_queue: Vec::new(),
+            response_queue: Vec::new(),
         })
     }
+
+    fn process_incoming_messages(&mut self) {
+        let conn = self.connection.clone();
+        let mut conn = conn.try_lock().unwrap();
+        let connection_id = conn.connection_id;
+        while let Ok(message) = conn.recv_rx.try_recv() {
+            match message {
+                TcpBrokerMessage::NewTask(mut task_config) => {
+                    task_config.connection_id = connection_id;
+                    self.new_tasks.push(task_config);
+                }
+                TcpBrokerMessage::ExecuteTask(mut task_config, inputs) => {
+                    task_config.connection_id = connection_id;
+                    self.execute_queue.push((task_config, inputs));
+                }
+                TcpBrokerMessage::TaskResponse(mut task_config, outputs) => {
+                    task_config.connection_id = connection_id;
+                    self.response_queue.push((task_config, outputs));
+                }
+            }
+        }
+    }
 }
 
-impl PubSubAdapter for TCPClientAdapter {
-    fn read(&mut self) -> HashMap<PubSubChannelIDType, Vec<PubSubMessage>> {
-        let mut res = HashMap::new();
-        let mut stream = self.stream.try_lock().unwrap();
-        let packet: TCPPacket = match bincode::deserialize_from(&mut *stream) {
-            Ok(packet) => packet,
-            Err(e) => {
-                return res;
-            }
-        };
-        let id = packet.to;
-        trace!(
-            "Received TCPPacket from client: {:?} with {} messages",
-            id.to_string(),
-            packet.messages.len()
-        );
-        res.insert(id, packet.messages);
-        res
+impl BrokerAdapter for TcpBrokerClient {
+    fn get_new_tasks(&mut self) -> Result<Vec<BrokerTaskConfig>, BrokerAdapterError> {
+        self.process_incoming_messages();
+        Ok(self.new_tasks.drain(..).collect())
     }
 
-    fn write(&mut self, to_send: HashMap<PubSubChannelIDType, Vec<PubSubMessage>>) {
-        for (id, messages) in to_send.into_iter() {
-            let mut stream = self.stream.try_lock().unwrap();
-            let packet = TCPPacket {
-                from: id,
-                to: id,
-                messages,
-            };
+    fn send_new_task(&mut self, task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError> {
+        let message = TcpBrokerMessage::NewTask(task.clone());
+        let conn = self.connection.clone();
+        let conn = conn.try_lock().unwrap();
+        conn.send_tx
+            .try_send(message)
+            .map_err(|e| BrokerAdapterError::Generic(Box::new(e)))?;
+        Ok(())
+    }
 
-            match bincode::serialize_into(&mut *stream, &packet) {
-                Ok(_) => (),
-                Err(e) => {
-                    warn!("Failed to serialize / send TCPPacket: {:?}", e);
-                    return;
-                }
-            };
+    fn send_execute(
+        &mut self,
+        task: &BrokerTaskConfig,
+        inputs: &DataView,
+    ) -> Result<(), BrokerAdapterError> {
+        let message = TcpBrokerMessage::ExecuteTask(task.clone(), inputs.clone());
+        let conn = self.connection.clone();
+        let conn = conn.try_lock().unwrap();
+        conn.send_tx
+            .try_send(message)
+            .map_err(|e| BrokerAdapterError::Generic(Box::new(e)))?;
+        Ok(())
+    }
+
+    fn recv_response(&mut self, _task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError> {
+        self.process_incoming_messages();
+        if let Some((_task_config, outputs)) = self.response_queue.pop() {
+            Ok(outputs)
+        } else {
+            Err(BrokerAdapterError::WaitingForTaskResponse)
         }
     }
 
-    fn get_name(&self) -> String {
-        "TCPClientAdapter".to_string()
+    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, DataView)>, BrokerAdapterError> {
+        self.process_incoming_messages();
+        Ok(self.execute_queue.drain(..).collect())
+    }
+
+    fn send_response(
+        &mut self,
+        task: &BrokerTaskConfig,
+        outputs: &DataView,
+    ) -> Result<(), BrokerAdapterError> {
+        let message = TcpBrokerMessage::TaskResponse(task.clone(), outputs.clone());
+        let conn = self.connection.clone();
+        let conn = conn.try_lock().unwrap();
+        conn.send_tx
+            .try_send(message)
+            .map_err(|e| BrokerAdapterError::Generic(Box::new(e)))?;
+        Ok(())
     }
 }

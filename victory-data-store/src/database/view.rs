@@ -1,6 +1,5 @@
 use crate::{
-    buckets::{Bucket, BucketHandle},
-    datapoints::Datapoint,
+    buckets::BucketHandle,
     primitives::{
         serde::{deserializer::PrimitiveDeserializer, serialize::to_map},
         Primitives,
@@ -8,18 +7,13 @@ use crate::{
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
 
-use log::{debug, info, trace, warn};
+use log::warn;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
-};
-use thiserror::Error;
-use victory_wtf::Timepoint;
+use std::collections::HashMap;
 
-use super::{listener::DataStoreListener, Datastore, DatastoreError};
+use super::{Datastore, DatastoreError};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataView {
     pub maps: HashMap<TopicKey, Primitives>,
     bucket_cache: HashMap<TopicKeyHandle, Vec<BucketHandle>>,
@@ -125,12 +119,12 @@ impl DataView {
 
 #[cfg(test)]
 mod tests {
-    use log::debug;
+
     use serde::{Deserialize, Serialize};
     use victory_wtf::Timepoint;
 
     use crate::{
-        database::{database::view::DataView, Datastore},
+        database::{view::DataView, Datastore},
         topics::TopicKey,
     };
 
@@ -182,9 +176,9 @@ mod tests {
             .unwrap();
 
         let view = DataView::new()
-            .add_query(&datastore, &topic_a)
+            .add_query(&mut datastore, &topic_a)
             .unwrap()
-            .add_query(&datastore, &topic_b)
+            .add_query(&mut datastore, &topic_b)
             .unwrap();
 
         let result: TestStructA = view.get_latest(&topic_a).unwrap();

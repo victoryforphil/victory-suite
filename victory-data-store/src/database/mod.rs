@@ -5,14 +5,10 @@ use crate::{
         serde::{deserializer::PrimitiveDeserializer, serialize::to_map},
         Primitives,
     },
-    sync::{
-        config::SyncConfig, subscription::Subscription, DatastoreSync, DatastoreSyncHandle,
-        SyncAdapterHandle,
-    },
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
 use listener::DataStoreListener;
-use log::{debug, info, trace, warn};
+use log::{debug, trace, warn};
 use retention::RetentionPolicy;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
@@ -20,7 +16,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
-use tracing::{info_span, instrument, Instrument};
+use tracing::instrument;
 use victory_wtf::Timepoint;
 use view::DataView;
 
@@ -33,7 +29,6 @@ pub mod view;
 pub struct Datastore {
     buckets: HashMap<TopicKeyHandle, BucketHandle>,
     listeners: HashMap<TopicKeyHandle, Vec<Arc<Mutex<dyn DataStoreListener>>>>,
-    pub sync: Option<DatastoreSyncHandle>,
     pub retention: RetentionPolicy,
     /// Cache of topic searches and their resulting buckets
     query_cache: HashMap<TopicKeyHandle, Vec<BucketHandle>>,
@@ -59,7 +54,6 @@ impl Datastore {
         Datastore {
             listeners: HashMap::new(),
             buckets: HashMap::new(),
-            sync: None,
             retention: RetentionPolicy::default(),
             query_cache: HashMap::new(),
         }
@@ -373,7 +367,7 @@ impl Datastore {
         );
         self.listeners
             .entry(topic_query.clone().handle())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(listener.clone());
         Ok(())
     }
@@ -409,53 +403,8 @@ impl Datastore {
     pub fn notify_bucket_updates(&mut self, _buckets: Vec<BucketHandle>) {}
 }
 
-/// ----------------------------
-/// Sync Implementations
-/// ----------------------------
-impl Datastore {
-    #[instrument(skip_all)]
-    pub fn setup_sync(&mut self, config: SyncConfig, adapter: SyncAdapterHandle) {
-        let ds_sync = DatastoreSync::new(config.clone(), adapter).as_handle();
-        self.sync = Some(ds_sync.clone());
-
-        self.add_listener(&TopicKey::empty(), ds_sync.clone());
-    }
-
-    #[instrument(skip_all)]
-    pub fn run_sync(&mut self) {
-        let sync = self.sync.clone();
-        if let Some(sync) = sync {
-            let new_subscriptions = sync.lock().unwrap().sync();
-
-            for sub in new_subscriptions {
-                let new_datapoints = self
-                    .get_latest_datapoints(&sub.topic_query)
-                    .unwrap()
-                    .clone();
-                debug!(
-                    "[Datastore/Sync] Sending {} latest datapoints to new subscriber: {:?}",
-                    new_datapoints.len(),
-                    sub.topic_query
-                );
-                self.notify_datapoints(new_datapoints);
-            }
-            let received_datapoints = sync.lock().unwrap().drain_new_datapoints();
-            if !received_datapoints.is_empty() {
-                debug!(
-                    "[Datastore/Sync] Received {} new datapoints",
-                    received_datapoints.len()
-                );
-                self.add_datapoints_silent(received_datapoints);
-            }
-        } else {
-            warn!("[Datastore/Sync] No sync handler set up");
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use log::debug;
 
     use crate::database::*;
 
@@ -623,9 +572,9 @@ mod tests {
             .unwrap();
 
         let view = DataView::new()
-            .add_query(&datastore, &topic_a)
+            .add_query(&mut datastore, &topic_a)
             .unwrap()
-            .add_query(&datastore, &topic_b)
+            .add_query(&mut datastore, &topic_b)
             .unwrap();
 
         let result: TestStructA = view.get_latest(&topic_a).unwrap();
