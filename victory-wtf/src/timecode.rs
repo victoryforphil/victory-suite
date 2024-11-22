@@ -2,10 +2,22 @@ use std::ops::{Add, Sub};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Timecode {
     pub(crate) secs: u64,
     pub(crate) nanos: u32,
+}
+
+impl PartialOrd for Timecode {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Timecode {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.ns().cmp(&other.ns())
+    }
 }
 
 impl Timecode {
