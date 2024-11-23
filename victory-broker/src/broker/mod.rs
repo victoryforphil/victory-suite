@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use log::{debug, info, warn};
 use victory_data_store::database::{view::DataView, Datastore, DatastoreHandle};
-use victory_wtf::Timepoint;
+use victory_wtf::{Timepoint, Timespan};
 
 use crate::{
     adapters::{AdapterID, BrokerAdapterError, BrokerAdapterHandle},
@@ -49,7 +49,7 @@ where
             datastore: database.handle(),
             task_configs: HashMap::new(),
             task_states: HashMap::new(),
-            broker_time: Timepoint::zero(),
+            broker_time: Timepoint::zero()
         }
     }
 
@@ -59,7 +59,9 @@ where
         self.adapters.insert(id, adapter);
     }
 
-    pub fn tick(&mut self) -> Result<(), BrokerError> {
+    pub fn tick(&mut self, delta_time: Timespan) -> Result<(), BrokerError> {
+        // Update accumulated time
+   
         // 1. Read new tasks from adapters
         match self.read_new_tasks() {
             Ok(tasks) => tasks,
@@ -75,7 +77,7 @@ where
         if !next_tasks.is_empty() {
             debug!(
                 "Broker // Next tasks: {:?}",
-                next_tasks.iter().map(|t| t.task_id).collect::<Vec<_>>()
+                next_tasks.iter().map(|t| t.name.clone()).collect::<Vec<_>>()
             );
         } else {
             return Ok(());
@@ -93,86 +95,137 @@ where
         // Launch tasks in parallel
         for (task_id, task_config) in queued_tasks {
             // Skip if trigger check fails
-            if self.check_trigger(&task_config).is_err() {
-                continue;
+            match self.check_trigger(&task_config) {
+                Ok(false) | Err(_) => continue,
+                Ok(true) => {}
             }
-
-            // Get inputs before spawning thread
-            let inputs = self.get_task_inputs(&task_config).unwrap();
 
             // Clone values needed in thread
             let task_id = task_id;
             let task_config = task_config.clone();
             let adapter = self.adapters.get(&task_config.adapter_id).unwrap().clone();
-            let task_state = self.task_states.get_mut(&task_id).unwrap();
-            let broker_time = self.broker_time.clone();
+            let task_state = self.task_states.get(&task_id).unwrap();
+           
+
+            // Get inputs before spawning thread
+            let inputs = self.get_task_inputs(&task_config, task_state).unwrap();
+
+         
             let datastore = self.datastore.clone();
 
             // Set initial state
+            let broker_time = self.broker_time.clone();
+            let task_state = self.task_states.get_mut(&task_id).unwrap();
             task_state.set_last_execution_time(broker_time);
             task_state.set_status(BrokerTaskStatus::Executing);
 
+
+         
+            let broker_time = self.broker_time.clone();
             // Spawn thread
             let handle = std::thread::spawn(move || {
+                
                 debug!(
-                    "Broker // Executing task: {:?} using adapter: {:?}",
-                    task_id, task_config.adapter_id
+                    "Broker // Executing task: {:?} using adapter: {:?} with {} inputs",
+                    task_config.name, task_config.adapter_id, inputs.maps.keys().len()
                 );
 
                 let mut adapter = adapter.lock().unwrap();
 
+                // Send inputs in chunks
+                let input_datapoints = inputs.get_all_datapoints();
+                for chunk in input_datapoints.chunks(32) {
+                    debug!(
+                        "Broker // Sending {:?} inputs for task {:?}",
+                        chunk.len(),
+                        task_config.name
+                    );
+                    if let Err(e) = adapter.send_inputs(&chunk.to_vec()) {
+                        warn!("Broker // Failed to send inputs for task {:?}: {:?}", task_config.name, e);
+                        return Err(BrokerError::TaskExecutionFailed(task_config));
+                    }
+                }
+
                 // Execute the task
-                if let Err(e) = adapter.send_execute(&task_config, &inputs) {
-                    warn!("Broker // Failed to execute task {:?}: {:?}", task_id, e);
+                if let Err(e) = adapter.send_execute(&task_config, &broker_time) {
+                    warn!("Broker // Failed to execute task {:?}: {:?}", task_config.name, e);
                     return Err(BrokerError::TaskExecutionFailed(task_config));
                 }
 
-                // Wait for response if task is blocking
-                debug!("Broker // Waiting for response for {:?}", task_id);
-                let task_response = if task_config
-                    .flags
-                    .contains(&BrokerCommanderFlags::NonBlocking)
-                {
-                    // For non-blocking tasks, don't wait for response
+                // Handle outputs and response based on blocking mode
+                if task_config.flags.contains(&BrokerCommanderFlags::NonBlocking) {
                     debug!(
                         "Broker // Task {:?} is non-blocking, not waiting for response",
-                        task_id
+                        task_config.name
                     );
-                    Ok(DataView::new())
-                } else {
-                    // For blocking tasks, wait with timeout
-                    let mut task_response = adapter.recv_response(&task_config);
-                    let start_time = std::time::Instant::now();
-
-                    while let Err(BrokerAdapterError::WaitingForTaskResponse) = task_response {
-                        if start_time.elapsed() > std::time::Duration::from_millis(250) {
-                            warn!(
-                                "Broker // Task {:?} timed out waiting for response",
-                                task_id
+                    // Still read any pending outputs before returning
+                    while let Ok(mut outputs) = adapter.recv_outputs() {
+                        if outputs.len() > 0 {
+                            debug!(
+                                "Broker // Received {:?} outputs for non-blocking task {:?}",
+                                outputs.len(),
+                                task_config.name
                             );
-                            return Err(BrokerError::TaskTimeout(task_config));
+                            // Override datapoints to broker time
+                            for datapoint in &mut outputs {
+                                datapoint.time = broker_time.clone();
+                            }
+                            datastore.lock().unwrap().add_datapoints(outputs);
+                        } else {
+                            break;
                         }
-                        task_response = adapter.recv_response(&task_config);
-                        std::thread::sleep(std::time::Duration::from_millis(1));
                     }
-                    task_response
-                };
+                    Ok(())
+                } else {
+                    let start_time = std::time::Instant::now();
+                    let timeout = std::time::Duration::from_millis(250);
 
-                debug!("Broker // Response for {:?}", task_id);
+                    // Continuously check for outputs while waiting for response
+                    while start_time.elapsed() < timeout {
+                        // Check for outputs and response in a single loop
+                        if let Ok(mut outputs) = adapter.recv_outputs() {
+                            if outputs.len() > 0 {
+                                debug!(
+                                    "Broker // Received {:?} outputs for task {:?}",
+                                outputs.len(),
+                                    task_config.name
+                                );
+                                // Override datapoints to broker time
+                                for datapoint in &mut outputs {
+                                    datapoint.time = broker_time.clone();
+                                }
+                                datastore.lock().unwrap().add_datapoints(outputs);
+                            }
+                        }
 
-                // Apply response to datastore
-                datastore
-                    .lock()
-                    .unwrap()
-                    .apply_view(task_response.unwrap())
-                    .unwrap();
+                        match adapter.recv_response(&task_config) {
+                            Ok(_) => {
+                                debug!("Broker // Received response for {:?}", task_config.name);
+                                return Ok(());
+                            }
+                            Err(BrokerAdapterError::WaitingForTaskResponse) => {
+                                std::thread::sleep(std::time::Duration::from_millis(1));
+                                continue;
+                            }
+                            Err(e) => {
+                                warn!("Broker // Error receiving response for {:?}: {:?}", task_config.name, e);
+                                return Err(BrokerError::TaskExecutionFailed(task_config));
+                            }
+                        }
+                    }
 
-                Ok(())
+                    warn!(
+                        "Broker // Task {:?} timed out waiting for response",
+                        task_config.name
+                    );
+                    Err(BrokerError::TaskTimeout(task_config))
+                }
             });
 
             join_handles.push((task_id, handle));
         }
 
+        self.broker_time = self.broker_time.clone() + delta_time.clone();
         // Wait for all threads to complete
         for (task_id, handle) in join_handles {
             match handle.join() {
@@ -187,7 +240,8 @@ where
                         }
                         Err(e) => {
                             // Handle task error
-                            warn!("Broker // Task {:?} failed: {:?}", task_id, e);
+                            let task_name = self.task_configs.get(&task_id).unwrap().name.clone();
+                            warn!("Broker // Task {:?} failed: {:?}", task_name, e);
                             self.task_states.remove(&task_id);
                             self.task_configs.remove(&task_id);
                             self.commander.remove_task(task_id).unwrap();
@@ -196,7 +250,8 @@ where
                     }
                 }
                 Err(e) => {
-                    warn!("Broker // Thread panic for task {:?}: {:?}", task_id, e);
+                    let task_name = self.task_configs.get(&task_id).unwrap().name.clone();
+                    warn!("Broker // Thread panic for task {:?}: {:?}", task_name, e);
                     return Err(BrokerError::Generic(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         "Thread panicked",
@@ -204,7 +259,9 @@ where
                 }
             }
         }
+    
 
+        // Update broker time        
         Ok(())
     }
 
@@ -241,7 +298,7 @@ where
             for task in &mut new_tasks {
                 debug!(
                     "Broker // New Task {:?} read from adapter {:?}",
-                    task.task_id, adapter_id
+                    task.name, adapter_id
                 );
                 task.adapter_id = *adapter_id;
                 // Create a new task state and insert it into the task_states map
@@ -264,18 +321,25 @@ where
                 let last_execution = &self.task_states[&task.task_id].last_execution_time;
                 // if last_execution is None, then the task has never been executed, so return true
                 if last_execution.is_none() {
+                    warn!("Broker // Task {:?} has never been executed, returning true", task.name);
                     return Ok(true);
                 }
                 let last_execution = last_execution.as_ref().unwrap();
                 //TODO: Don't use secs()
-                Ok(now.secs() - last_execution.secs() >= timespan.secs())
+                Ok(now.ns() - last_execution.ns() >= timespan.ns())
             }
         }
     }
 
-    fn get_task_inputs(&self, task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError> {
+    fn get_task_inputs(
+        &self,
+        task: &BrokerTaskConfig,
+        state: & BrokerTaskState,
+    ) -> Result<DataView, BrokerAdapterError> {
         let subscriptions = &task.subscriptions;
         let mut inputs = DataView::new();
+        let last_execution = state.last_execution_time.clone().unwrap_or(Timepoint::zero());
+        
         for subscription in subscriptions {
             match subscription.mode {
                 SubscriptionMode::Latest => {
@@ -287,11 +351,15 @@ where
                         .unwrap();
                 }
                 SubscriptionMode::NewValues => {
-                    warn!("NewValues subscription not implemented");
+                    debug!(
+                        "Broker // Adding new values subscription for {:?} after {:.3?}s",
+                        task.name, last_execution.secs()
+                    );
                     inputs = inputs
-                        .add_query(
+                        .add_query_after(
                             &mut self.datastore.lock().unwrap(),
                             &subscription.topic_query,
+                            &last_execution,
                         )
                         .unwrap();
                 }
@@ -343,11 +411,11 @@ mod broker_tests {
         adapter.new_tasks.push(task_b);
 
         broker.adapters.insert(0, Arc::new(Mutex::new(adapter)));
-        broker.tick().unwrap();
+        broker.tick(Timespan::new_secs(0.1)).unwrap();
         assert_eq!(broker.task_states[&0].status, BrokerTaskStatus::Completed);
         assert_eq!(broker.task_states[&1].status, BrokerTaskStatus::Idle);
 
-        broker.tick().unwrap();
+        broker.tick(Timespan::new_secs(0.1)).unwrap();
         assert_eq!(broker.task_states[&0].status, BrokerTaskStatus::Completed);
         assert_eq!(broker.task_states[&1].status, BrokerTaskStatus::Completed);
     }

@@ -72,8 +72,7 @@ impl BrokerTaskConfig {
         self
     }
 
-    pub fn add_subscription(mut self, subscription: BrokerTaskSubscription) -> Self {
+    pub fn add_subscription(&mut self, subscription: BrokerTaskSubscription) {
         self.subscriptions.push(subscription);
-        self
     }
 }

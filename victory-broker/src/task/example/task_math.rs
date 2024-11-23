@@ -33,6 +33,10 @@ impl TaskMath {
 }
 
 impl BrokerTask for TaskMath {
+    fn init(&mut self) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+
     fn get_config(&self) -> BrokerTaskConfig {
         BrokerTaskConfig::new("TaskMath").with_trigger(BrokerTaskTrigger::Always)
     }

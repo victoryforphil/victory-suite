@@ -1,5 +1,8 @@
+use core::time;
+
 use log::info;
 use tokio::net::TcpStream;
+use victory_wtf::Timepoint;
 
 use super::{
     connection::{TcpBrokerConnection, TcpBrokerConnectionHandle},
@@ -7,15 +10,17 @@ use super::{
 };
 use crate::adapters::{BrokerAdapter, BrokerAdapterError};
 use crate::task::config::BrokerTaskConfig;
-use victory_data_store::database::view::DataView;
+use victory_data_store::{database::view::DataView, datapoints::Datapoint};
 
 pub struct TcpBrokerClient {
     address: String,
     connection: TcpBrokerConnectionHandle,
     // Internal queues for managing tasks and responses
     new_tasks: Vec<BrokerTaskConfig>,
-    execute_queue: Vec<(BrokerTaskConfig, DataView)>,
-    response_queue: Vec<(BrokerTaskConfig, DataView)>,
+    execute_queue: Vec<(BrokerTaskConfig, Timepoint)>,
+    response_queue: Vec<BrokerTaskConfig>,
+    inputs: Vec<Datapoint>,
+    outputs: Vec<Datapoint>,
 }
 
 impl TcpBrokerClient {
@@ -32,6 +37,8 @@ impl TcpBrokerClient {
             new_tasks: Vec::new(),
             execute_queue: Vec::new(),
             response_queue: Vec::new(),
+            inputs: Vec::new(),
+            outputs: Vec::new(),
         })
     }
 
@@ -45,13 +52,19 @@ impl TcpBrokerClient {
                     task_config.connection_id = connection_id;
                     self.new_tasks.push(task_config);
                 }
-                TcpBrokerMessage::ExecuteTask(mut task_config, inputs) => {
+                TcpBrokerMessage::ExecuteTask(mut task_config, time) => {
                     task_config.connection_id = connection_id;
-                    self.execute_queue.push((task_config, inputs));
+                    self.execute_queue.push((task_config, time));
                 }
-                TcpBrokerMessage::TaskResponse(mut task_config, outputs) => {
+                TcpBrokerMessage::TaskResponse(mut task_config) => {
                     task_config.connection_id = connection_id;
-                    self.response_queue.push((task_config, outputs));
+                    self.response_queue.push(task_config);
+                }
+                TcpBrokerMessage::Inputs(inputs) => {
+                    self.inputs.extend(inputs);
+                }
+                TcpBrokerMessage::Outputs(outputs) => {
+                    self.outputs.extend(outputs);
                 }
             }
         }
@@ -77,9 +90,9 @@ impl BrokerAdapter for TcpBrokerClient {
     fn send_execute(
         &mut self,
         task: &BrokerTaskConfig,
-        inputs: &DataView,
+        time: &Timepoint
     ) -> Result<(), BrokerAdapterError> {
-        let message = TcpBrokerMessage::ExecuteTask(task.clone(), inputs.clone());
+        let message = TcpBrokerMessage::ExecuteTask(task.clone(), time.clone());
         let conn = self.connection.clone();
         let conn = conn.try_lock().unwrap();
         conn.send_tx
@@ -88,31 +101,68 @@ impl BrokerAdapter for TcpBrokerClient {
         Ok(())
     }
 
-    fn recv_response(&mut self, _task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError> {
+    fn recv_response(&mut self, _task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError> {
         self.process_incoming_messages();
-        if let Some((_task_config, outputs)) = self.response_queue.pop() {
-            Ok(outputs)
+        if let Some(task_config) = self.response_queue.pop() {
+            Ok(())
         } else {
             Err(BrokerAdapterError::WaitingForTaskResponse)
         }
     }
 
-    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, DataView)>, BrokerAdapterError> {
+    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, Timepoint)>, BrokerAdapterError> {
         self.process_incoming_messages();
         Ok(self.execute_queue.drain(..).collect())
     }
 
     fn send_response(
         &mut self,
-        task: &BrokerTaskConfig,
-        outputs: &DataView,
+        task: &BrokerTaskConfig
     ) -> Result<(), BrokerAdapterError> {
-        let message = TcpBrokerMessage::TaskResponse(task.clone(), outputs.clone());
+        let message = TcpBrokerMessage::TaskResponse(task.clone());
         let conn = self.connection.clone();
         let conn = conn.try_lock().unwrap();
         conn.send_tx
             .try_send(message)
             .map_err(|e| BrokerAdapterError::Generic(Box::new(e)))?;
         Ok(())
+    }
+
+    fn send_inputs(&mut self, inputs: &Vec<Datapoint>) -> Result<(), BrokerAdapterError> {
+        let message = TcpBrokerMessage::Inputs(inputs.clone());
+        let conn = self.connection.clone();
+        let conn = conn.try_lock().unwrap();
+        conn.send_tx
+            .try_send(message)
+            .map_err(|e| BrokerAdapterError::Generic(Box::new(e)))?;
+        Ok(())
+    }
+    
+    fn recv_inputs(&mut self) -> Result<Vec<Datapoint>, BrokerAdapterError> {
+        self.process_incoming_messages();
+        if self.inputs.is_empty() {
+            Err(BrokerAdapterError::NoPendingInputs)
+        } else {
+            Ok(self.inputs.drain(..).collect())
+        }
+    }
+
+    fn send_outputs(&mut self, outputs: &Vec<Datapoint>) -> Result<(), BrokerAdapterError> {
+        let message = TcpBrokerMessage::Outputs(outputs.clone());
+        let conn = self.connection.clone();
+        let conn = conn.try_lock().unwrap();
+        conn.send_tx
+            .try_send(message)
+            .map_err(|e| BrokerAdapterError::Generic(Box::new(e)))?;
+        Ok(())
+    }
+
+    fn recv_outputs(&mut self) -> Result<Vec<Datapoint>, BrokerAdapterError> {
+        self.process_incoming_messages();
+        if self.outputs.is_empty() {
+            Err(BrokerAdapterError::NoPendingOutputs)
+        } else {
+            Ok(self.outputs.drain(..).collect())
+        }
     }
 }

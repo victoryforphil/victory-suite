@@ -3,7 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::adapters::{BrokerAdapter, BrokerAdapterError};
 use crate::task::config::BrokerTaskConfig;
-use victory_data_store::database::view::DataView;
+use victory_data_store::{database::view::DataView, datapoints::Datapoint};
+use victory_wtf::Timepoint;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ChannelBrokerError {
@@ -18,15 +19,19 @@ pub struct ChannelBrokerAdapter {
     recv_rx: Receiver<ChannelMessage>,
     // Internal queues for managing tasks and responses
     new_tasks: Vec<BrokerTaskConfig>,
-    execute_queue: Vec<(BrokerTaskConfig, DataView)>,
-    response_queue: Vec<(BrokerTaskConfig, DataView)>,
+    execute_queue: Vec<(BrokerTaskConfig, Timepoint)>,
+    response_queue: Vec<BrokerTaskConfig>,
+    inputs: Vec<Datapoint>,
+    outputs: Vec<Datapoint>,
 }
 
 // Messages exchanged between adapters
 enum ChannelMessage {
     NewTask(BrokerTaskConfig),
-    ExecuteTask(BrokerTaskConfig, DataView),
-    TaskResponse(BrokerTaskConfig, DataView),
+    ExecuteTask(BrokerTaskConfig, Timepoint),
+    TaskResponse(BrokerTaskConfig),
+    Inputs(Vec<Datapoint>),
+    Outputs(Vec<Datapoint>),
 }
 
 impl ChannelBrokerAdapter {
@@ -41,6 +46,8 @@ impl ChannelBrokerAdapter {
             new_tasks: Vec::new(),
             execute_queue: Vec::new(),
             response_queue: Vec::new(),
+            inputs: Vec::new(),
+            outputs: Vec::new(),
         };
 
         let adapter_b = ChannelBrokerAdapter {
@@ -49,6 +56,8 @@ impl ChannelBrokerAdapter {
             new_tasks: Vec::new(),
             execute_queue: Vec::new(),
             response_queue: Vec::new(),
+            inputs: Vec::new(),
+            outputs: Vec::new(),
         };
 
         (
@@ -64,11 +73,17 @@ impl ChannelBrokerAdapter {
                 ChannelMessage::NewTask(task_config) => {
                     self.new_tasks.push(task_config);
                 }
-                ChannelMessage::ExecuteTask(task_config, inputs) => {
-                    self.execute_queue.push((task_config, inputs));
+                ChannelMessage::ExecuteTask(task_config, time) => {
+                    self.execute_queue.push((task_config, time));
                 }
-                ChannelMessage::TaskResponse(task_config, outputs) => {
-                    self.response_queue.push((task_config, outputs));
+                ChannelMessage::TaskResponse(task_config) => {
+                    self.response_queue.push(task_config);
+                }
+                ChannelMessage::Inputs(inputs) => {
+                    self.inputs.extend(inputs);
+                }
+                ChannelMessage::Outputs(outputs) => {
+                    self.outputs.extend(outputs);
                 }
             }
         }
@@ -92,38 +107,63 @@ impl BrokerAdapter for ChannelBrokerAdapter {
     fn send_execute(
         &mut self,
         task: &BrokerTaskConfig,
-        inputs: &DataView,
+        time: &Timepoint,
     ) -> Result<(), BrokerAdapterError> {
         self.send_tx
-            .send(ChannelMessage::ExecuteTask(task.clone(), inputs.clone()))
+            .send(ChannelMessage::ExecuteTask(task.clone(), time.clone()))
             .map_err(|_| {
                 BrokerAdapterError::Generic(Box::new(ChannelBrokerError::ChannelSendError))
             })
     }
 
-    fn recv_response(&mut self, _task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError> {
+    fn recv_response(&mut self, _task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError> {
         self.process_incoming_messages();
-        if let Some((_task_config, outputs)) = self.response_queue.pop() {
-            Ok(outputs)
+        if let Some(task_config) = self.response_queue.pop() {
+            Ok(())
         } else {
             Err(BrokerAdapterError::WaitingForTaskResponse)
         }
     }
 
-    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, DataView)>, BrokerAdapterError> {
+    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, Timepoint)>, BrokerAdapterError> {
         self.process_incoming_messages();
         Ok(self.execute_queue.drain(..).collect())
     }
 
     fn send_response(
         &mut self,
-        task: &BrokerTaskConfig,
-        outputs: &DataView,
+        task: &BrokerTaskConfig
     ) -> Result<(), BrokerAdapterError> {
         self.send_tx
-            .send(ChannelMessage::TaskResponse(task.clone(), outputs.clone()))
+            .send(ChannelMessage::TaskResponse(task.clone()))
             .map_err(|_| {
                 BrokerAdapterError::Generic(Box::new(ChannelBrokerError::ChannelSendError))
             })
+    }
+    
+    fn send_inputs(&mut self, inputs: &Vec<Datapoint>) -> Result<(), BrokerAdapterError> {
+        self.send_tx
+            .send(ChannelMessage::Inputs(inputs.clone()))
+            .map_err(|_| {
+                BrokerAdapterError::Generic(Box::new(ChannelBrokerError::ChannelSendError))
+            })
+    }
+    
+    fn recv_inputs(&mut self) -> Result<Vec<Datapoint>, BrokerAdapterError> {
+        self.process_incoming_messages();
+        Ok(self.inputs.drain(..).collect())
+    }
+
+    fn send_outputs(&mut self, outputs: &Vec<Datapoint>) -> Result<(), BrokerAdapterError> {
+        self.send_tx
+            .send(ChannelMessage::Outputs(outputs.clone()))
+            .map_err(|_| {
+                BrokerAdapterError::Generic(Box::new(ChannelBrokerError::ChannelSendError))
+            })
+    }
+
+    fn recv_outputs(&mut self) -> Result<Vec<Datapoint>, BrokerAdapterError> {
+        self.process_incoming_messages();
+        Ok(self.outputs.drain(..).collect())
     }
 }

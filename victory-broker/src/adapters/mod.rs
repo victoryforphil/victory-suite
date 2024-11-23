@@ -3,7 +3,8 @@ pub type ConnectionID = u32;
 
 use std::sync::{Arc, Mutex};
 
-use victory_data_store::database::view::DataView;
+use victory_data_store::{database::view::DataView, datapoints::Datapoint};
+use victory_wtf::Timepoint;
 
 use crate::task::config::BrokerTaskConfig;
 
@@ -20,22 +21,36 @@ pub enum BrokerAdapterError {
     /// Waiting for task response
     #[error("Waiting for task response")]
     WaitingForTaskResponse,
+
+    /// No Pending Inputs
+    #[error("No pending inputs")]
+    NoPendingInputs,
+
+    /// No Pending Outputs
+    #[error("No pending outputs")]
+    NoPendingOutputs,
 }
 
 pub trait BrokerAdapter: Send {
     fn get_new_tasks(&mut self) -> Result<Vec<BrokerTaskConfig>, BrokerAdapterError>;
     fn send_new_task(&mut self, task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError>;
+
+    fn send_inputs(&mut self, inputs: &Vec<Datapoint>) -> Result<(), BrokerAdapterError>;
+    fn recv_inputs(&mut self) -> Result<Vec<Datapoint>, BrokerAdapterError>;
+
+    fn send_outputs(&mut self, outputs: &Vec<Datapoint>) -> Result<(), BrokerAdapterError>;
+    fn recv_outputs(&mut self) -> Result<Vec<Datapoint>, BrokerAdapterError>;
+
     fn send_execute(
         &mut self,
         task: &BrokerTaskConfig,
-        inputs: &DataView,
+        time: &Timepoint,
     ) -> Result<(), BrokerAdapterError>;
-    fn recv_response(&mut self, task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError>;
+    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, Timepoint)>, BrokerAdapterError>;
 
-    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, DataView)>, BrokerAdapterError>;
     fn send_response(
         &mut self,
-        task: &BrokerTaskConfig,
-        outputs: &DataView,
+        task: &BrokerTaskConfig
     ) -> Result<(), BrokerAdapterError>;
+    fn recv_response(&mut self, task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError>;
 }

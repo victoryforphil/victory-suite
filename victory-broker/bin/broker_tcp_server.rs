@@ -11,7 +11,7 @@ use victory_broker::{
     commander::linear::LinearBrokerCommander,
 };
 use victory_data_store::topics::TopicKey;
-
+use victory_wtf::Timespan;
 #[derive(Parser)]
 struct Args {
     /// IP address to bind to
@@ -65,7 +65,7 @@ async fn main() {
         }
     });
     loop {
-        match broker.tick() {
+        match broker.tick(Timespan::new_ms(5.0)) {
             Ok(_) => (),
             Err(e) => {
                 warn!("Broker // Error: {:?}", e);

@@ -342,12 +342,75 @@ impl Datastore {
 
     #[instrument(skip_all)]
     pub fn apply_view(&mut self, view: DataView) -> Result<(), DatastoreError> {
-        let mut datapoints = Vec::new();
-        for (key, value) in view.maps {
-            datapoints.push(Datapoint::new(&key, Timepoint::now(), value));
+        for (topic, datapoint) in view.maps {
+            self.add_datapoint(datapoint)?;
         }
-        self.add_datapoints(datapoints);
         Ok(())
+    }
+
+    pub fn add_datapoint(&mut self, datapoint: Datapoint) -> Result<(), DatastoreError> {
+        self.create_bucket(&datapoint.topic);
+        let bucket = self.buckets.get_mut(&datapoint.topic).unwrap();
+        bucket.write().unwrap().add_datapoint(datapoint.clone()).unwrap();
+        self.notify_datapoints(vec![datapoint]);
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    pub fn get_datapoints_after<T: TopicKeyProvider>(
+        &self,
+        topic: &T,
+        time: &Timepoint,
+    ) -> Result<Vec<Datapoint>, DatastoreError> {
+        let topic = topic.handle();
+        let buckets = self.get_buckets_matching(&topic)?;
+        let mut datapoints = Vec::new();
+        for bucket in buckets {
+            let bucket = bucket.read().unwrap();
+            datapoints.extend(bucket.get_data_points_after(time).into_iter().cloned());
+        }
+        Ok(datapoints)
+    }
+
+    #[instrument(skip_all)]
+    pub fn get_primitives_after<T: TopicKeyProvider>(
+        &self,
+        topic: &T,
+        time: &Timepoint,
+    ) -> Result<Vec<Primitives>, DatastoreError> {
+        let datapoints = self.get_datapoints_after(topic, time)?;
+        Ok(datapoints.into_iter().map(|dp| dp.value).collect())
+    }
+
+    #[instrument(skip_all)]
+    pub fn get_struct_after<T: TopicKeyProvider, S: DeserializeOwned>(
+        &self,
+        topic: &T,
+        time: &Timepoint,
+    ) -> Result<Option<S>, DatastoreError> {
+        let buckets = self.get_buckets_matching(topic)?;
+        let mut value_map = HashMap::new();
+
+        for bucket in buckets {
+            let bucket = bucket.read().unwrap();
+            if let Some(datapoint) = bucket.get_data_points_after(time).first() {
+                let key = datapoint
+                    .topic
+                    .key()
+                    .remove_prefix(topic.key().clone())
+                    .unwrap();
+                value_map.insert(key.handle(), datapoint.value.clone());
+            }
+        }
+
+        if value_map.is_empty() {
+            return Ok(None);
+        }
+
+        let mut deserializer = PrimitiveDeserializer::new(&value_map);
+        S::deserialize(&mut deserializer)
+            .map(Some)
+            .map_err(|e| DatastoreError::Generic(format!("Error deserializing struct: {:?}", e)))
     }
 }
 
@@ -592,5 +655,32 @@ mod tests {
 
         let result: TestStructB = new_datastore.get_struct(&topic_b).unwrap();
         assert_eq!(result, test_struct_b);
+    }
+
+    #[test]
+    pub fn test_datastore_get_after() {
+        let mut datastore = Datastore::new();
+        let topic: TopicKey = "/test/topic".into();
+        let time_before = Timepoint::new_secs(1.0);
+        let data_time = Timepoint::new_secs(1.5);
+        let time_after = Timepoint::new_secs(2.0);
+
+        let test_struct = TestStructA {
+            a: 42,
+            b: "test".to_string(),
+        };
+
+        datastore
+            .add_struct(&topic, data_time.clone(), test_struct.clone())
+            .unwrap();
+
+        // Test getting data after an earlier time (should return data)
+        let result: Option<TestStructA> = datastore.get_struct_after(&topic, &time_before).unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), test_struct);
+
+        // Test getting data after a later time (should return None)
+        let result: Option<TestStructA> = datastore.get_struct_after(&topic, &time_after).unwrap();
+        assert!(result.is_none());
     }
 }

@@ -1,4 +1,5 @@
-use victory_data_store::database::view::DataView;
+use victory_data_store::{database::view::DataView, datapoints::Datapoint};
+use victory_wtf::Timepoint;
 
 use crate::task::config::BrokerTaskConfig;
 
@@ -8,7 +9,9 @@ use super::{BrokerAdapter, BrokerAdapterError};
 
 pub struct MockBrokerAdapter {
     pub new_tasks: Vec<BrokerTaskConfig>,
-    pub executed_tasks: Vec<(BrokerTaskConfig, DataView)>,
+    pub executed_tasks: Vec<(BrokerTaskConfig, Timepoint)>,
+    pub inputs: Vec<Datapoint>,
+    pub outputs: Vec<Datapoint>,
 }
 
 impl MockBrokerAdapter {
@@ -16,6 +19,8 @@ impl MockBrokerAdapter {
         Self {
             new_tasks: vec![],
             executed_tasks: vec![],
+            inputs: vec![],
+            outputs: vec![],
         }
     }
 }
@@ -28,30 +33,47 @@ impl BrokerAdapter for MockBrokerAdapter {
     fn send_execute(
         &mut self,
         task: &BrokerTaskConfig,
-        inputs: &DataView,
+        time: &Timepoint,
     ) -> Result<(), BrokerAdapterError> {
-        self.executed_tasks.push((task.clone(), inputs.clone()));
+        self.executed_tasks.push((task.clone(), time.clone())); 
         Ok(())
     }
 
-    fn recv_response(&mut self, task: &BrokerTaskConfig) -> Result<DataView, BrokerAdapterError> {
-        Ok(DataView::new())
+    fn recv_response(&mut self, _task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError> {
+        Ok(())
     }
 
-    fn send_new_task(&mut self, task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError> {
-        todo!()
+    fn send_new_task(&mut self, _task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError> {
+        Ok(())
     }
 
-    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, DataView)>, BrokerAdapterError> {
-        todo!()
+    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, Timepoint)>, BrokerAdapterError> {
+        Ok(vec![])
     }
 
     fn send_response(
         &mut self,
-        task: &BrokerTaskConfig,
-        outputs: &DataView,
+        _task: &BrokerTaskConfig
     ) -> Result<(), BrokerAdapterError> {
-        todo!()
+        Ok(())
+    }
+    
+    fn send_inputs(&mut self, inputs: &Vec<Datapoint>) -> Result<(), BrokerAdapterError> {
+        self.inputs = inputs.clone();
+        Ok(())
+    }
+    
+    fn recv_inputs(&mut self) -> Result<Vec<Datapoint>, BrokerAdapterError> {
+        Ok(self.inputs.drain(..).collect())
+    }
+
+    fn send_outputs(&mut self, outputs: &Vec<Datapoint>) -> Result<(), BrokerAdapterError> {
+        self.outputs = outputs.clone();
+        Ok(())
+    }
+
+    fn recv_outputs(&mut self) -> Result<Vec<Datapoint>, BrokerAdapterError> {
+        Ok(self.outputs.drain(..).collect())
     }
 }
 
@@ -80,8 +102,8 @@ mod broker_adapter_tests {
     fn test_mock_adapter_execute_task() {
         let mut adapter = MockBrokerAdapter::new();
         let task = BrokerTaskConfig::new_with_id(0, "test_task");
-        let inputs = DataView::new();
-        adapter.send_execute(&task, &inputs).unwrap();
+        let time = Timepoint::now();
+        adapter.send_execute(&task, &time).unwrap();
         assert_eq!(adapter.executed_tasks.len(), 1);
         assert_eq!(adapter.executed_tasks[0].0.task_id, task.task_id);
     }

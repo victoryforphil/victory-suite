@@ -1,21 +1,22 @@
 use crate::{
     buckets::BucketHandle,
+    datapoints::Datapoint,
     primitives::{
-        serde::{deserializer::PrimitiveDeserializer, serialize::to_map},
-        Primitives,
+        serde::{deserializer::PrimitiveDeserializer, serialize::to_map}, Primitives,
     },
     topics::{TopicKey, TopicKeyHandle, TopicKeyProvider},
 };
 
 use log::warn;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use victory_wtf::Timepoint;
 use std::collections::HashMap;
 
 use super::{Datastore, DatastoreError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataView {
-    pub maps: HashMap<TopicKey, Primitives>,
+    pub maps: HashMap<TopicKey, Datapoint>,
     bucket_cache: HashMap<TopicKeyHandle, Vec<BucketHandle>>,
 }
 
@@ -32,7 +33,34 @@ impl DataView {
             bucket_cache: HashMap::new(),
         }
     }
-    #[tracing::instrument(skip_all)]
+
+    pub fn add_query_from_view(
+        mut self,
+        view: &DataView,
+        topic: &TopicKey,
+    ) -> Result<DataView, DatastoreError> {
+        for (key, datapoint) in view.maps.iter() {
+            if key.key().is_child_of(topic) || key.key() == topic {
+                self.maps.insert(key.clone(), datapoint.clone());
+            }
+        }
+        Ok(self)
+    }
+
+    pub fn add_query_after_from_view(
+        mut self,
+        view: &DataView,
+        topic: &TopicKey,
+        time: &Timepoint,
+    ) -> Result<DataView, DatastoreError> {
+        for (key, datapoint) in view.maps.iter() {
+            if (key.key().is_child_of(topic) || key.key() == topic) && datapoint.time >= *time {
+                self.maps.insert(key.clone(), datapoint.clone());
+            }
+        }
+        Ok(self)
+    }
+
     pub fn add_query(
         mut self,
         datastore: &mut Datastore,
@@ -44,33 +72,48 @@ impl DataView {
 
             if let Some(value) = bucket.get_latest_datapoint() {
                 let key = value.topic.key().clone();
-                self.maps.insert(key, value.value.clone());
+                self.maps.insert(key, value.clone());
             }
         }
 
         Ok(self)
     }
-    #[tracing::instrument(skip_all)]
+
+    pub fn add_query_after(
+        mut self,
+        datastore: &mut Datastore,
+        topic: &TopicKey,
+        time: &Timepoint,
+    ) -> Result<DataView, DatastoreError> {
+        let buckets = datastore.get_buckets_matching_cached(topic)?;
+        for bucket in buckets {
+            let bucket = bucket.read().unwrap();
+            for datapoint in bucket.get_data_points_after(time) {
+                let key = datapoint.topic.key().clone();
+                self.maps.insert(key, datapoint.clone());
+            }
+        }
+        Ok(self)
+    }
+
     pub fn get_latest_map<T: TopicKeyProvider>(
         &self,
         topic: &T,
-    ) -> Result<HashMap<TopicKey, Primitives>, DatastoreError> {
+    ) -> Result<HashMap<TopicKey, Datapoint>, DatastoreError> {
         let map = self
             .maps
             .iter()
             .filter_map(|(k, v)| {
-                if k.key().is_child_of(topic.key()) {
-                    Some((k.key().clone(), v.clone()))
-                } else if k.key() == topic.key() {
+                if k.key().is_child_of(topic.key()) || k.key() == topic.key() {
                     Some((k.key().clone(), v.clone()))
                 } else {
                     None
                 }
             })
-            .collect::<HashMap<TopicKey, Primitives>>();
+            .collect::<HashMap<TopicKey, Datapoint>>();
         Ok(map)
     }
-    #[tracing::instrument(skip_all)]
+
     pub fn get_latest<T: TopicKeyProvider, S: DeserializeOwned>(
         &self,
         topic: &T,
@@ -81,7 +124,7 @@ impl DataView {
             .filter_map(|(k, v)| {
                 if k.key().is_child_of(topic.key()) {
                     let key = k.key().remove_prefix(topic.key().clone()).unwrap();
-                    Some((key.handle(), v.clone()))
+                    Some((key.handle(), v.value.clone()))
                 } else {
                     None
                 }
@@ -93,15 +136,9 @@ impl DataView {
         let result = S::deserialize(&mut deserializer)
             .map_err(|e| DatastoreError::Generic(format!("Error deserializing struct: {:?}", e)));
 
-        match result {
-            Ok(s) => Ok(s),
-            Err(e) => Err(DatastoreError::Generic(format!(
-                "Error deserializing struct: {:?}",
-                e
-            ))),
-        }
+        result
     }
-    #[tracing::instrument(skip_all)]
+
     pub fn add_latest<T: TopicKeyProvider, S: Serialize>(
         &mut self,
         topic: &T,
@@ -109,12 +146,104 @@ impl DataView {
     ) -> Result<(), DatastoreError> {
         let topic_key = topic.key().clone();
         let value_map = to_map(&value).unwrap();
-        for (key, value) in value_map {
+        for (key, primitive_value) in value_map {
             let full_key = key.add_prefix(topic_key.clone());
-            self.maps.insert(full_key, value);
+            let datapoint = Datapoint {
+                topic: full_key.handle(),
+                time: Timepoint::now(),
+                value: primitive_value,
+            };
+            self.maps.insert(full_key, datapoint);
         }
         Ok(())
     }
+    
+    pub fn get_datapoint<T: TopicKeyProvider>(
+        &self,
+        topic: &T,
+    ) -> Option<&Datapoint> {
+        self.maps.get(topic.key())
+    }
+
+    pub fn get_value<T: TopicKeyProvider>(
+        &self,
+        topic: &T,
+    ) -> Option<&Primitives> {
+        self.maps.get(topic.key()).map(|dp| &dp.value)
+    }
+
+    pub fn get_time<T: TopicKeyProvider>(
+        &self,
+        topic: &T,
+    ) -> Option<&Timepoint> {
+        self.maps.get(topic.key()).map(|dp| &dp.time)
+    }
+    pub fn add_datapoint(&mut self, datapoint: Datapoint) -> Result<(), DatastoreError> {
+        //TODO: Use topic handle instead of key
+        self.maps.insert(datapoint.topic.key().clone(), datapoint);
+        Ok(())
+    }
+
+    pub fn get_all_datapoints(&self) -> Vec<Datapoint> {
+        self.maps.values().cloned().collect()
+    }
+
+    pub fn get_datapoints_after<T: TopicKeyProvider>(
+        &self,
+        topic: &T,
+        time: &Timepoint,
+    ) -> Vec<&Datapoint> {
+        if let Some(datapoint) = self.maps.get(topic.key()) {
+            if datapoint.time >= *time {
+                return vec![datapoint];
+            }
+        }
+        Vec::new()
+    }
+
+    pub fn get_primitives_after<T: TopicKeyProvider>(
+        &self,
+        topic: &T,
+        time: &Timepoint,
+    ) -> Vec<&Primitives> {
+        if let Some(datapoint) = self.maps.get(topic.key()) {
+            if datapoint.time >= *time {
+                return vec![&datapoint.value];
+            }
+        }
+        Vec::new()
+    }
+
+    pub fn get_struct_after<T: TopicKeyProvider, S: DeserializeOwned>(
+        &self,
+        topic: &T,
+        time: &Timepoint,
+    ) -> Result<Option<S>, DatastoreError> {
+        let value_map = self
+            .maps
+            .iter()
+            .filter_map(|(k, v)| {
+                if k.key().is_child_of(topic.key()) && v.time >= *time {
+                    let key = k.key().remove_prefix(topic.key().clone()).unwrap();
+                    Some((key.handle(), v.value.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect::<HashMap<TopicKeyHandle, Primitives>>();
+
+        if value_map.is_empty() {
+            return Ok(None);
+        }
+
+        let mut deserializer = PrimitiveDeserializer::new(&value_map);
+        let result = S::deserialize(&mut deserializer)
+            .map(Some)
+            .map_err(|e| DatastoreError::Generic(format!("Error deserializing struct: {:?}", e)));
+
+        result
+    }
+
 }
 
 #[cfg(test)]
@@ -197,4 +326,6 @@ mod tests {
         let result: TestStructB = new_datastore.get_struct(&topic_b).unwrap();
         assert_eq!(result, test_struct_b);
     }
+
+
 }

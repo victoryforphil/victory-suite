@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use victory_wtf::Timepoint;
 
 use crate::{
-    primitives::Primitives,
+    primitives::{serde::serialize::to_map, Primitives},
     topics::{TopicKeyHandle, TopicKeyProvider},
 };
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -30,6 +30,7 @@ impl Datapoint {
             value,
         }
     }
+
 }
 
 #[cfg(test)]

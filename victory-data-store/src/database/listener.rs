@@ -6,7 +6,7 @@ use std::{
 
 pub trait DataStoreListener: Send {
     fn on_datapoint(&mut self, datapoint: &Datapoint);
-    fn on_raw_datapoint(&mut self, datapoint: &Datapoint) {}
+    fn on_raw_datapoint(&mut self, _datapoint: &Datapoint) {}
     fn on_bucket_update(&mut self, bucket: &BucketHandle);
     fn get_filter(&self) -> Option<TopicKey> {
         None
@@ -60,7 +60,7 @@ impl DataStoreListener for MockDataStoreListener {
         Some(self.filter.clone())
     }
 
-    fn on_bucket_update(&mut self, bucket: &BucketHandle) {}
+    fn on_bucket_update(&mut self, _bucket: &BucketHandle) {}
 }
 
 #[cfg(test)]

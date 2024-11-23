@@ -34,11 +34,7 @@ impl Bucket {
     }
     #[tracing::instrument(skip_all)]
     pub fn set_retention(&mut self, retention: RetentionPolicy) {
-        debug!(
-            "Setting retention policy for bucket {:?}: {:?}",
-            self.topic.display_name(),
-            retention
-        );
+       
         self.retention = retention;
     }
     #[tracing::instrument(skip_all)]
