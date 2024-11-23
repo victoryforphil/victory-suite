@@ -1,7 +1,10 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use tokio::sync::Mutex;
 
 use crate::adapters::{BrokerAdapter, BrokerAdapterError};
+use crate::broker::time::BrokerTime;
 use crate::task::config::BrokerTaskConfig;
 use victory_data_store::{database::view::DataView, datapoints::Datapoint};
 use victory_wtf::Timepoint;
@@ -19,7 +22,7 @@ pub struct ChannelBrokerAdapter {
     recv_rx: Receiver<ChannelMessage>,
     // Internal queues for managing tasks and responses
     new_tasks: Vec<BrokerTaskConfig>,
-    execute_queue: Vec<(BrokerTaskConfig, Timepoint)>,
+    execute_queue: Vec<(BrokerTaskConfig, BrokerTime)>,
     response_queue: Vec<BrokerTaskConfig>,
     inputs: Vec<Datapoint>,
     outputs: Vec<Datapoint>,
@@ -28,7 +31,7 @@ pub struct ChannelBrokerAdapter {
 // Messages exchanged between adapters
 enum ChannelMessage {
     NewTask(BrokerTaskConfig),
-    ExecuteTask(BrokerTaskConfig, Timepoint),
+    ExecuteTask(BrokerTaskConfig, BrokerTime),
     TaskResponse(BrokerTaskConfig),
     Inputs(Vec<Datapoint>),
     Outputs(Vec<Datapoint>),
@@ -107,7 +110,7 @@ impl BrokerAdapter for ChannelBrokerAdapter {
     fn send_execute(
         &mut self,
         task: &BrokerTaskConfig,
-        time: &Timepoint,
+        time: &BrokerTime,
     ) -> Result<(), BrokerAdapterError> {
         self.send_tx
             .send(ChannelMessage::ExecuteTask(task.clone(), time.clone()))
@@ -125,7 +128,7 @@ impl BrokerAdapter for ChannelBrokerAdapter {
         }
     }
 
-    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, Timepoint)>, BrokerAdapterError> {
+    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, BrokerTime)>, BrokerAdapterError> {
         self.process_incoming_messages();
         Ok(self.execute_queue.drain(..).collect())
     }

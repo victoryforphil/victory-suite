@@ -1,7 +1,7 @@
 use victory_data_store::{database::view::DataView, datapoints::Datapoint};
 use victory_wtf::Timepoint;
 
-use crate::task::config::BrokerTaskConfig;
+use crate::{broker::time::BrokerTime, task::config::BrokerTaskConfig};
 
 use super::{BrokerAdapter, BrokerAdapterError};
 
@@ -9,7 +9,7 @@ use super::{BrokerAdapter, BrokerAdapterError};
 
 pub struct MockBrokerAdapter {
     pub new_tasks: Vec<BrokerTaskConfig>,
-    pub executed_tasks: Vec<(BrokerTaskConfig, Timepoint)>,
+    pub executed_tasks: Vec<(BrokerTaskConfig, BrokerTime)>,
     pub inputs: Vec<Datapoint>,
     pub outputs: Vec<Datapoint>,
 }
@@ -33,7 +33,7 @@ impl BrokerAdapter for MockBrokerAdapter {
     fn send_execute(
         &mut self,
         task: &BrokerTaskConfig,
-        time: &Timepoint,
+        time: &BrokerTime,
     ) -> Result<(), BrokerAdapterError> {
         self.executed_tasks.push((task.clone(), time.clone())); 
         Ok(())
@@ -47,7 +47,7 @@ impl BrokerAdapter for MockBrokerAdapter {
         Ok(())
     }
 
-    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, Timepoint)>, BrokerAdapterError> {
+    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, BrokerTime)>, BrokerAdapterError> {
         Ok(vec![])
     }
 
@@ -79,6 +79,8 @@ impl BrokerAdapter for MockBrokerAdapter {
 
 #[cfg(test)]
 mod broker_adapter_tests {
+    use victory_wtf::Timespan;
+
     use super::*;
 
     /// Test the get_new_tasks method
@@ -102,7 +104,11 @@ mod broker_adapter_tests {
     fn test_mock_adapter_execute_task() {
         let mut adapter = MockBrokerAdapter::new();
         let task = BrokerTaskConfig::new_with_id(0, "test_task");
-        let time = Timepoint::now();
+        let time = BrokerTime {
+            time_monotonic: Timepoint::now(),
+            time_delta: Timespan::zero(),
+            time_last_monotonic: None,
+        };
         adapter.send_execute(&task, &time).unwrap();
         assert_eq!(adapter.executed_tasks.len(), 1);
         assert_eq!(adapter.executed_tasks[0].0.task_id, task.task_id);

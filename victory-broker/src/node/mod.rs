@@ -6,8 +6,7 @@ use victory_data_store::database::view::DataView;
 use victory_wtf::Timepoint;
 
 use crate::{
-    adapters::{BrokerAdapterError, BrokerAdapterHandle},
-    task::{config::BrokerTaskConfig, subscription::SubscriptionMode, BrokerTaskHandle, BrokerTaskID},
+    adapters::{BrokerAdapterError, BrokerAdapterHandle}, broker::time::BrokerTime, task::{config::BrokerTaskConfig, subscription::SubscriptionMode, BrokerTaskHandle, BrokerTaskID}
 };
 
 pub mod info;
@@ -20,7 +19,6 @@ pub struct BrokerNode {
     pub view: DataView,
     pub task_handles: HashMap<BrokerTaskID, BrokerTaskHandle>,
     pub task_configs: HashMap<BrokerTaskID, BrokerTaskConfig>,
-    pub last_execute_times: HashMap<BrokerTaskID, Timepoint>,
 }
 
 impl BrokerNode {
@@ -30,8 +28,7 @@ impl BrokerNode {
             adapter,
             view: DataView::new(),
             task_handles: HashMap::new(),
-            task_configs: HashMap::new(),
-            last_execute_times: HashMap::new(),
+            task_configs: HashMap::new()
         }
     }
 
@@ -51,15 +48,15 @@ impl BrokerNode {
         self.task_handles.insert(task_config.task_id, task_handle);
         self.task_configs
             .insert(task_config.task_id, task_config.clone());
-        self.last_execute_times.insert(task_config.task_id, Timepoint::zero());
 
-        self.adapter.lock().unwrap().send_new_task(&task_config)?;
+        self.adapter.try_lock().unwrap().send_new_task(&task_config)?;
         Ok(())
     }
 
     pub fn tick(&mut self) -> Result<(), anyhow::Error> {
         // 1. Check for any execute requests from the adapter
-        let mut adapter = self.adapter.lock().unwrap();
+        let adapter = self.adapter.clone();
+        let mut adapter = adapter.try_lock().unwrap();
 
         // 1. Get any inputs from the adapter and add them to the view
         let mut n_updates = 0;
@@ -83,17 +80,14 @@ impl BrokerNode {
 
         // 3. Execute the tasks
         let execute_requests = adapter.recv_execute()?;
-
+        let task_configs = self.task_configs.clone();
         // 2. Execute the tasks
         // TODO: Parallelize this so tasks can execute in parallel
         for (task_config, time) in execute_requests.iter() {
-            // Store the current execution time
-            let prev_time = self.last_execute_times.get(&task_config.task_id).cloned().unwrap_or(Timepoint::zero());
-            self.last_execute_times.insert(task_config.task_id, time.clone());
-
+            
             // Get our copy of the task_config and inputs
-            let task_config = self.task_configs.get(&task_config.task_id).unwrap();
-            let inputs = self.get_inputs(&task_config, &prev_time)?;
+            let task_config = task_configs.get(&task_config.task_id).unwrap();
+            let inputs = self.get_inputs(&task_config, &time.time_last_monotonic.clone().unwrap_or_default())?;
             debug!(
                 "Node {:?} // Executing task {:?} with {:?} total inputs",
                 self.info.name, task_config.name, inputs.maps.keys().len()
@@ -104,7 +98,7 @@ impl BrokerNode {
                 .task_handles
                 .get_mut(&task_config.task_id)
                 .expect("Task not found");
-            let results = task_handle.lock().unwrap().on_execute(&inputs)?;
+            let results = task_handle.lock().unwrap().on_execute(&inputs, &time)?;
 
             // 4. Send the results back to the adapter using send outputs
             let outputs = results.get_all_datapoints();
@@ -123,7 +117,7 @@ impl BrokerNode {
         Ok(())
     }
 
-    fn get_inputs(&self, task: &BrokerTaskConfig, prev_time: &Timepoint) -> Result<DataView, BrokerAdapterError> {
+    fn get_inputs(&mut self, task: &BrokerTaskConfig, prev_time: &Timepoint) -> Result<DataView, BrokerAdapterError> {
         let mut inputs = DataView::new();
         
         for subscription in &task.subscriptions {
@@ -137,8 +131,11 @@ impl BrokerNode {
                 SubscriptionMode::NewValues => {
                     // Get only values after last execution
                     inputs = inputs
-                        .add_query_after_from_view(&self.view, &subscription.topic_query, prev_time)
+                        .add_query_from_view(&self.view, &subscription.topic_query)
                         .unwrap();
+
+                    // Remove all datapoints that match the topic query
+                    self.view.remove_query(&subscription.topic_query);
                 }
             }
         }

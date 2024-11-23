@@ -8,7 +8,7 @@ use super::{
     connection::{TcpBrokerConnection, TcpBrokerConnectionHandle},
     message::TcpBrokerMessage,
 };
-use crate::adapters::{BrokerAdapter, BrokerAdapterError};
+use crate::{adapters::{BrokerAdapter, BrokerAdapterError}, broker::time::BrokerTime};
 use crate::task::config::BrokerTaskConfig;
 use victory_data_store::{database::view::DataView, datapoints::Datapoint};
 
@@ -17,7 +17,7 @@ pub struct TcpBrokerClient {
     connection: TcpBrokerConnectionHandle,
     // Internal queues for managing tasks and responses
     new_tasks: Vec<BrokerTaskConfig>,
-    execute_queue: Vec<(BrokerTaskConfig, Timepoint)>,
+    execute_queue: Vec<(BrokerTaskConfig, BrokerTime)>,
     response_queue: Vec<BrokerTaskConfig>,
     inputs: Vec<Datapoint>,
     outputs: Vec<Datapoint>,
@@ -90,7 +90,7 @@ impl BrokerAdapter for TcpBrokerClient {
     fn send_execute(
         &mut self,
         task: &BrokerTaskConfig,
-        time: &Timepoint
+        time: &BrokerTime
     ) -> Result<(), BrokerAdapterError> {
         let message = TcpBrokerMessage::ExecuteTask(task.clone(), time.clone());
         let conn = self.connection.clone();
@@ -103,14 +103,14 @@ impl BrokerAdapter for TcpBrokerClient {
 
     fn recv_response(&mut self, _task: &BrokerTaskConfig) -> Result<(), BrokerAdapterError> {
         self.process_incoming_messages();
-        if let Some(task_config) = self.response_queue.pop() {
+        if let Some(_task_config) = self.response_queue.pop() {
             Ok(())
         } else {
             Err(BrokerAdapterError::WaitingForTaskResponse)
         }
     }
 
-    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, Timepoint)>, BrokerAdapterError> {
+    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, BrokerTime)>, BrokerAdapterError> {
         self.process_incoming_messages();
         Ok(self.execute_queue.drain(..).collect())
     }

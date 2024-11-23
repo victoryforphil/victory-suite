@@ -3,6 +3,8 @@ use std::sync::{Arc, Mutex};
 use config::BrokerTaskConfig;
 use victory_data_store::database::view::DataView;
 
+use crate::broker::time::BrokerTime;
+
 pub mod example;
 pub mod state;
 pub mod subscription;
@@ -19,5 +21,5 @@ pub trait BrokerTask: Send {
         Ok(())
     }
     fn get_config(&self) -> BrokerTaskConfig;
-    fn on_execute(&mut self, inputs: &DataView) -> Result<DataView, anyhow::Error>;
+    fn on_execute(&mut self, inputs: &DataView, timing: &BrokerTime) -> Result<DataView, anyhow::Error>;
 }

@@ -18,6 +18,7 @@ use super::{Datastore, DatastoreError};
 pub struct DataView {
     pub maps: HashMap<TopicKey, Datapoint>,
     bucket_cache: HashMap<TopicKeyHandle, Vec<BucketHandle>>,
+    time: Timepoint,
 }
 
 impl Default for DataView {
@@ -31,6 +32,15 @@ impl DataView {
         DataView {
             maps: HashMap::new(),
             bucket_cache: HashMap::new(),
+            time: Timepoint::zero(),
+        }
+    }
+
+    pub fn new_timed(time: Timepoint) -> DataView {
+        DataView {
+            maps: HashMap::new(),
+            bucket_cache: HashMap::new(),
+            time,
         }
     }
 
@@ -70,8 +80,9 @@ impl DataView {
         for bucket in buckets {
             let bucket = bucket.read().unwrap();
 
-            if let Some(value) = bucket.get_latest_datapoint() {
+            if let Some( value) = bucket.get_latest_datapoint() {
                 let key = value.topic.key().clone();
+                
                 self.maps.insert(key, value.clone());
             }
         }
@@ -95,7 +106,18 @@ impl DataView {
         }
         Ok(self)
     }
-
+    pub fn remove_query<T: TopicKeyProvider>(&mut self, topic: &T) {
+        self.maps = self.maps
+            .iter()
+            .filter_map(|(k, v)| {
+                if !k.key().is_child_of(topic.key()) && k.key() != topic.key() {
+                    Some((k.clone(), v.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+    }
     pub fn get_latest_map<T: TopicKeyProvider>(
         &self,
         topic: &T,
@@ -150,7 +172,7 @@ impl DataView {
             let full_key = key.add_prefix(topic_key.clone());
             let datapoint = Datapoint {
                 topic: full_key.handle(),
-                time: Timepoint::now(),
+                time: self.time.clone(),
                 value: primitive_value,
             };
             self.maps.insert(full_key, datapoint);
@@ -277,6 +299,7 @@ mod tests {
             b: "test".to_string(),
         };
         let mut view = DataView::new();
+        view.time = Timepoint::zero();
         view.add_latest(&topic, test_struct.clone()).unwrap();
         let result: TestStructA = view.get_latest(&topic).unwrap();
         assert_eq!(result, test_struct);
@@ -288,7 +311,7 @@ mod tests {
         let mut datastore = Datastore::new();
         let topic_a: TopicKey = "/test/a".into();
         let topic_b: TopicKey = "/test/b".into();
-        let time = Timepoint::now();
+        let time = Timepoint::zero();
         let test_struct_a = TestStructA {
             a: 42,
             b: "test".to_string(),
