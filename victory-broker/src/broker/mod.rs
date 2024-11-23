@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
+use time::BrokerTime;
+use tracing::instrument;
 use victory_data_store::database::{view::DataView, Datastore, DatastoreHandle};
 use victory_wtf::{Timepoint, Timespan};
 
@@ -16,13 +18,15 @@ use crate::{
     },
 };
 
+pub mod time;
+
 pub struct Broker<TCommander> {
     pub(crate) commander: TCommander,
     pub(crate) adapters: HashMap<AdapterID, BrokerAdapterHandle>,
     pub(crate) datastore: DatastoreHandle,
     pub(crate) task_configs: HashMap<BrokerTaskID, BrokerTaskConfig>,
     pub(crate) task_states: HashMap<BrokerTaskID, BrokerTaskState>,
-    broker_time: Timepoint,
+    timing: BrokerTime,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -49,19 +53,23 @@ where
             datastore: database.handle(),
             task_configs: HashMap::new(),
             task_states: HashMap::new(),
-            broker_time: Timepoint::zero()
+            timing: BrokerTime::default(),
         }
     }
-
+    #[instrument(skip_all)]
     pub fn add_adapter(&mut self, adapter: BrokerAdapterHandle) {
         let id = rand::random::<u32>();
         info!("Broker // Adding adapter with id: {:?}", id);
         self.adapters.insert(id, adapter);
     }
+    #[instrument(skip_all)]
+    pub async fn tick(&mut self, delta_time: Timespan) -> Result<(), BrokerError> {
+                        
+     
+        
+        let span = tracing::span!(tracing::Level::TRACE, "broker_tick");
+        let _enter = span.enter();
 
-    pub fn tick(&mut self, delta_time: Timespan) -> Result<(), BrokerError> {
-        // Update accumulated time
-   
         // 1. Read new tasks from adapters
         match self.read_new_tasks() {
             Ok(tasks) => tasks,
@@ -82,6 +90,7 @@ where
         } else {
             return Ok(());
         }
+
         // 2.1 Set next_tasks to Queued state.
         for task in next_tasks {
             self.set_task_status(task.task_id, BrokerTaskStatus::Queued);
@@ -100,41 +109,36 @@ where
                 Ok(true) => {}
             }
 
-            // Clone values needed in thread
+            // Clone values needed in task
             let task_id = task_id;
             let task_config = task_config.clone();
             let adapter = self.adapters.get(&task_config.adapter_id).unwrap().clone();
             let task_state = self.task_states.get(&task_id).unwrap();
-           
 
-            // Get inputs before spawning thread
+            // Get inputs before spawning task
             let inputs = self.get_task_inputs(&task_config, task_state).unwrap();
-
-         
             let datastore = self.datastore.clone();
 
             // Set initial state
-            let broker_time = self.broker_time.clone();
             let task_state = self.task_states.get_mut(&task_id).unwrap();
-            task_state.set_last_execution_time(broker_time);
+            task_state.set_last_execution_time(self.timing.time_monotonic.clone());
             task_state.set_status(BrokerTaskStatus::Executing);
+            
+            let broker_time = self.timing.clone();
 
-
-         
-            let broker_time = self.broker_time.clone();
-            // Spawn thread
-            let handle = std::thread::spawn(move || {
-                
+            // Spawn task
+            let handle = tokio::spawn(async move {
                 debug!(
                     "Broker // Executing task: {:?} using adapter: {:?} with {} inputs",
                     task_config.name, task_config.adapter_id, inputs.maps.keys().len()
                 );
 
-                let mut adapter = adapter.lock().unwrap();
+                let mut adapter = adapter.lock().await;
 
                 // Send inputs in chunks
                 let input_datapoints = inputs.get_all_datapoints();
                 for chunk in input_datapoints.chunks(32) {
+               
                     debug!(
                         "Broker // Sending {:?} inputs for task {:?}",
                         chunk.len(),
@@ -147,6 +151,7 @@ where
                 }
 
                 // Execute the task
+               
                 if let Err(e) = adapter.send_execute(&task_config, &broker_time) {
                     warn!("Broker // Failed to execute task {:?}: {:?}", task_config.name, e);
                     return Err(BrokerError::TaskExecutionFailed(task_config));
@@ -159,17 +164,17 @@ where
                         task_config.name
                     );
                     // Still read any pending outputs before returning
+                    let recv_outputs_span = tracing::span!(tracing::Level::TRACE, "recv_outputs", task_name = %task_config.name);
+                    let _recv_outputs_enter = recv_outputs_span.enter();
                     while let Ok(mut outputs) = adapter.recv_outputs() {
+  
                         if outputs.len() > 0 {
                             debug!(
                                 "Broker // Received {:?} outputs for non-blocking task {:?}",
                                 outputs.len(),
                                 task_config.name
                             );
-                            // Override datapoints to broker time
-                            for datapoint in &mut outputs {
-                                datapoint.time = broker_time.clone();
-                            }
+                            
                             datastore.lock().unwrap().add_datapoints(outputs);
                         } else {
                             break;
@@ -177,23 +182,23 @@ where
                     }
                     Ok(())
                 } else {
-                    let start_time = std::time::Instant::now();
-                    let timeout = std::time::Duration::from_millis(250);
+                    let start = tokio::time::Instant::now();
+                    let timeout = tokio::time::Duration::from_millis(250);
 
                     // Continuously check for outputs while waiting for response
-                    while start_time.elapsed() < timeout {
+                    let recv_outputs_response_span = tracing::span!(tracing::Level::TRACE, "recv_outputs_response", task_name = %task_config.name);
+                    let _recv_outputs_response_enter = recv_outputs_response_span.enter();
+                    while start.elapsed() < timeout {
+                      
                         // Check for outputs and response in a single loop
-                        if let Ok(mut outputs) = adapter.recv_outputs() {
+                        if let Ok( outputs) = adapter.recv_outputs() {
                             if outputs.len() > 0 {
                                 debug!(
                                     "Broker // Received {:?} outputs for task {:?}",
-                                outputs.len(),
+                                    outputs.len(),
                                     task_config.name
                                 );
-                                // Override datapoints to broker time
-                                for datapoint in &mut outputs {
-                                    datapoint.time = broker_time.clone();
-                                }
+                               
                                 datastore.lock().unwrap().add_datapoints(outputs);
                             }
                         }
@@ -204,7 +209,7 @@ where
                                 return Ok(());
                             }
                             Err(BrokerAdapterError::WaitingForTaskResponse) => {
-                                std::thread::sleep(std::time::Duration::from_millis(1));
+                               
                                 continue;
                             }
                             Err(e) => {
@@ -225,10 +230,11 @@ where
             join_handles.push((task_id, handle));
         }
 
-        self.broker_time = self.broker_time.clone() + delta_time.clone();
-        // Wait for all threads to complete
+        // Wait for all tasks to complete
+        let wait_for_tasks_span = tracing::span!(tracing::Level::TRACE, "wait_for_tasks");
+        let _wait_for_tasks_enter = wait_for_tasks_span.enter();
         for (task_id, handle) in join_handles {
-            match handle.join() {
+            match handle.await {
                 Ok(result) => {
                     match result {
                         Ok(_) => {
@@ -251,17 +257,15 @@ where
                 }
                 Err(e) => {
                     let task_name = self.task_configs.get(&task_id).unwrap().name.clone();
-                    warn!("Broker // Thread panic for task {:?}: {:?}", task_name, e);
+                    warn!("Broker // Task {:?} panicked: {:?}", task_name, e);
                     return Err(BrokerError::Generic(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        "Thread panicked",
+                        "Task panicked",
                     ))));
                 }
             }
         }
-    
-
-        // Update broker time        
+        self.timing.update(delta_time);
         Ok(())
     }
 
@@ -292,7 +296,7 @@ where
     /// Read for any new registered tasks from adapters
     fn read_new_tasks(&mut self) -> Result<(), anyhow::Error> {
         for (adapter_id, adapter_handle) in self.adapters.iter_mut() {
-            let mut adapter = adapter_handle.lock().unwrap();
+            let mut adapter = adapter_handle.try_lock().unwrap();
             let mut new_tasks = adapter.get_new_tasks()?;
 
             for task in &mut new_tasks {
@@ -317,7 +321,7 @@ where
         match &task.trigger {
             BrokerTaskTrigger::Always => Ok(true),
             BrokerTaskTrigger::Rate(timespan) => {
-                let now = &self.broker_time;
+                let now = &self.timing.time_monotonic;
                 let last_execution = &self.task_states[&task.task_id].last_execution_time;
                 // if last_execution is None, then the task has never been executed, so return true
                 if last_execution.is_none() {
@@ -351,7 +355,7 @@ where
                         .unwrap();
                 }
                 SubscriptionMode::NewValues => {
-                    debug!(
+                    trace!(
                         "Broker // Adding new values subscription for {:?} after {:.3?}s",
                         task.name, last_execution.secs()
                     );
@@ -471,7 +475,7 @@ mod broker_tests {
         // Time is 0, so trigger should return true
         assert!(trigger.unwrap(), "Trigger should return true");
 
-        let broker_time = broker.broker_time.clone();
+        let broker_time = broker.timing.time_monotonic.clone();
         // Set the last execution time to now
         broker
             .task_states
@@ -480,14 +484,14 @@ mod broker_tests {
             .set_last_execution_time(broker_time.clone());
 
         // Set the time to 0.5 seconds in the future
-        broker.broker_time = broker_time.clone() + Timespan::new_secs(0.5);
+        broker.timing.update(Timespan::new_secs(0.5));
         let trigger = broker.check_trigger(&task);
         assert!(trigger.is_ok());
         // Time is 0.5 seconds in the future, so trigger should return false
         assert!(!trigger.unwrap(), "Trigger should return false");
 
         // Set the time to 1.5 seconds in the future
-        broker.broker_time = broker_time.clone() + Timespan::new_secs(1.5);
+        broker.timing.update(Timespan::new_secs(1.5));
         let trigger = broker.check_trigger(&task);
         assert!(trigger.is_ok());
         // Time is 1.5 seconds in the future, so trigger should return true

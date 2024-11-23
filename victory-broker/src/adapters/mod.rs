@@ -1,12 +1,15 @@
 pub type AdapterID = u32;
 pub type ConnectionID = u32;
 
-use std::sync::{Arc, Mutex};
 
+
+use std::sync::Arc;
+
+use tokio::sync::Mutex;
 use victory_data_store::{database::view::DataView, datapoints::Datapoint};
 use victory_wtf::Timepoint;
 
-use crate::task::config::BrokerTaskConfig;
+use crate::{broker::time::BrokerTime, task::config::BrokerTaskConfig};
 
 pub mod channel;
 pub mod mock;
@@ -44,9 +47,9 @@ pub trait BrokerAdapter: Send {
     fn send_execute(
         &mut self,
         task: &BrokerTaskConfig,
-        time: &Timepoint,
+        time: &BrokerTime,
     ) -> Result<(), BrokerAdapterError>;
-    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, Timepoint)>, BrokerAdapterError>;
+    fn recv_execute(&mut self) -> Result<Vec<(BrokerTaskConfig, BrokerTime)>, BrokerAdapterError>;
 
     fn send_response(
         &mut self,

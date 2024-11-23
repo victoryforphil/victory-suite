@@ -1,4 +1,4 @@
-use crate::task::{config::BrokerTaskConfig, trigger::BrokerTaskTrigger, BrokerTask};
+use crate::{broker::time::BrokerTime, task::{config::BrokerTaskConfig, trigger::BrokerTaskTrigger, BrokerTask}};
 use anyhow::{Error, Result};
 use victory_data_store::{database::view::DataView, topics::TopicKey};
 
@@ -41,7 +41,7 @@ impl BrokerTask for TaskMath {
         BrokerTaskConfig::new("TaskMath").with_trigger(BrokerTaskTrigger::Always)
     }
 
-    fn on_execute(&mut self, inputs: &DataView) -> Result<DataView, Error> {
+    fn on_execute(&mut self, inputs: &DataView, _timing: &BrokerTime) -> Result<DataView, Error> {
         let mut outputs = DataView::new();
 
         let value_a = inputs
@@ -90,7 +90,7 @@ mod tests {
         inputs.add_latest(&input_topic_a, 10u64);
         inputs.add_latest(&input_topic_b, 5u64);
 
-        let outputs = task_math.on_execute(&inputs).unwrap();
+        let outputs = task_math.on_execute(&inputs, &BrokerTime::default()).unwrap();
         assert_eq!(outputs.get_latest::<_, u64>(&output_topic).unwrap(), 15u64);
     }
 
@@ -111,7 +111,7 @@ mod tests {
         inputs.add_latest(&input_topic_a, 10u64);
         inputs.add_latest(&input_topic_b, 0u64);
 
-        let result = task_math.on_execute(&inputs);
+        let result = task_math.on_execute(&inputs, &BrokerTime::default());
         assert!(result.is_err());
     }
 }

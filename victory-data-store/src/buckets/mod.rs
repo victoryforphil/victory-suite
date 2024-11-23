@@ -144,6 +144,7 @@ impl Bucket {
     }
 
     #[tracing::instrument(skip_all)]
+    /// Get all datapoints after or at a given time
     pub fn get_data_points_after(&self, time: &Timepoint) -> Vec<&Datapoint> {
         self.values.range(time.clone()..).map(|(_, v)| v).collect()
     }

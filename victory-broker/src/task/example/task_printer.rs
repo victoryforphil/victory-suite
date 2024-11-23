@@ -1,11 +1,11 @@
 use victory_data_store::{database::view::DataView, topics::TopicKey};
 
-use crate::task::{
+use crate::{broker::time::BrokerTime, task::{
     config::{BrokerCommanderFlags, BrokerTaskConfig},
     subscription::BrokerTaskSubscription,
     trigger::BrokerTaskTrigger,
     BrokerTask,
-};
+}};
 
 pub struct TaskPrinter {
     pub subscribe_topic: TopicKey,
@@ -32,6 +32,7 @@ impl BrokerTask for TaskPrinter {
     fn on_execute(
         &mut self,
         inputs: &victory_data_store::database::view::DataView,
+        _timing: &BrokerTime,
     ) -> Result<DataView, anyhow::Error> {
         if let Ok(values) = inputs.get_latest_map(&self.subscribe_topic) {
             // if values is empty, print empty message

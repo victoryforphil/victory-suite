@@ -1,6 +1,6 @@
 use victory_data_store::{database::view::DataView, topics::TopicKey};
 
-use crate::task::{config::BrokerTaskConfig, trigger::BrokerTaskTrigger, BrokerTask};
+use crate::{broker::time::BrokerTime, task::{config::BrokerTaskConfig, trigger::BrokerTaskTrigger, BrokerTask}};
 
 pub struct TaskTicker {
     pub publish_topic: TopicKey,
@@ -24,6 +24,7 @@ impl BrokerTask for TaskTicker {
     fn on_execute(
         &mut self,
         _inputs: &victory_data_store::database::view::DataView,
+        _timing: &BrokerTime,
     ) -> Result<victory_data_store::database::view::DataView, anyhow::Error> {
         let mut outputs = DataView::new();
         self.tick_value += 1;
@@ -38,6 +39,8 @@ impl BrokerTask for TaskTicker {
 
 #[cfg(test)]
 mod tests {
+    use victory_wtf::Timepoint;
+
     use super::*;
     #[test]
     fn test_ticker_counts() {
@@ -45,12 +48,12 @@ mod tests {
         let mut ticker = TaskTicker::new(topic.clone());
 
         // First execution
-        let inputs = DataView::new();
-        let outputs = ticker.on_execute(&inputs).unwrap();
+        let inputs = DataView::new_timed(Timepoint::zero());
+        let outputs = ticker.on_execute(&inputs, &BrokerTime::default()).unwrap();
         assert_eq!(outputs.get_latest::<_, u64>(&topic).unwrap(), 1);
 
         // Second execution - should output same value
-        let outputs = ticker.on_execute(&inputs).unwrap();
+        let outputs = ticker.on_execute(&inputs, &BrokerTime::default()).unwrap();
         assert_eq!(outputs.get_latest::<_, u64>(&topic).unwrap(), 2);
     }
 }

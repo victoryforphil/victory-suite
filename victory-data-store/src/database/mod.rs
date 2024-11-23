@@ -16,7 +16,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
-use tracing::instrument;
+use tracing::{debug_span, info_span, instrument};
 use victory_wtf::Timepoint;
 use view::DataView;
 
@@ -49,7 +49,7 @@ impl Default for Datastore {
 }
 
 impl Datastore {
-    #[instrument]
+    #[instrument(skip_all)]
     pub fn new() -> Datastore {
         Datastore {
             listeners: HashMap::new(),
@@ -77,6 +77,7 @@ impl Datastore {
     #[instrument(skip_all)]
     pub fn create_bucket<T: TopicKeyProvider>(&mut self, topic: &T) {
         if !self.buckets.contains_key(&topic.handle()) {
+            let _span = debug_span!("creating_bucket").entered();
             let bucket = Bucket::new(topic);
             bucket
                 .write()
@@ -606,7 +607,7 @@ mod tests {
             a: 42,
             b: "test".to_string(),
         };
-        let mut view = DataView::new();
+        let mut view = DataView::new_timed(Timepoint::zero());
         view.add_latest(&topic, test_struct.clone()).unwrap();
         let result: TestStructA = view.get_latest(&topic).unwrap();
         assert_eq!(result, test_struct);
