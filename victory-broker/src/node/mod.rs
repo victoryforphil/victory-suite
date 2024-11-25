@@ -93,6 +93,7 @@ impl BrokerNode {
                 self.info.name, task_config.name, inputs.maps.keys().len()
             );
 
+
             // Execute the task
             let task_handle = self
                 .task_handles
@@ -131,11 +132,11 @@ impl BrokerNode {
                 SubscriptionMode::NewValues => {
                     // Get only values after last execution
                     inputs = inputs
-                        .add_query_from_view(&self.view, &subscription.topic_query)
+                        .add_query_after_from_view(&self.view, &subscription.topic_query, &prev_time)
                         .unwrap();
 
                     // Remove all datapoints that match the topic query
-                    self.view.remove_query(&subscription.topic_query);
+                   // self.view.remove_query(&subscription.topic_query);
                 }
             }
         }

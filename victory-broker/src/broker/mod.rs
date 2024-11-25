@@ -121,6 +121,7 @@ where
 
             // Set initial state
             let task_state = self.task_states.get_mut(&task_id).unwrap();
+            let last_execution_time = task_state.last_execution_time.clone();
             task_state.set_last_execution_time(self.timing.time_monotonic.clone());
             task_state.set_status(BrokerTaskStatus::Executing);
             
@@ -151,8 +152,10 @@ where
                 }
 
                 // Execute the task
-               
-                if let Err(e) = adapter.send_execute(&task_config, &broker_time) {
+               // Override last execution time with task execution time
+                let mut new_timer = broker_time.clone();
+                new_timer.time_last_monotonic = last_execution_time.clone();
+                if let Err(e) = adapter.send_execute(&task_config, &new_timer) {
                     warn!("Broker // Failed to execute task {:?}: {:?}", task_config.name, e);
                     return Err(BrokerError::TaskExecutionFailed(task_config));
                 }
